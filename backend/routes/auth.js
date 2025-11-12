@@ -1,11 +1,32 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import passport from 'passport';
+import dotenv from 'dotenv';
+import {
+  findUserByEmail,
+  createUser,
+  getPublicUser
+} from '../models/userStore.js';
+
+dotenv.config();
 
 const router = express.Router();
 
-// In-memory user store (replace with database in production)
-const users = [];
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+function createToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      username: user.username,
+      email: user.email
+    },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+}
 
 // Register endpoint
 router.post('/register', async (req, res) => {
@@ -22,7 +43,7 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = users.find(u => u.email === email || u.username === username);
+    const existingUser = findUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -31,31 +52,20 @@ router.post('/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create user
-    const user = {
-      id: users.length + 1,
+    const user = createUser({
       username,
       email,
       password: hashedPassword,
-      createdAt: new Date()
-    };
-
-    users.push(user);
+      provider: 'local'
+    });
 
     // Generate JWT token
-    const token = jwt.sign(
-      { id: user.id, username: user.username, email: user.email },
-      process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-      { expiresIn: '24h' }
-    );
+    const token = createToken(user);
 
     res.status(201).json({
       message: 'User registered successfully',
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email
-      }
+      user: getPublicUser(user)
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -93,7 +103,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Normal login logic for registered users
-    const user = users.find(u => u.email === email);
+    const user = findUserByEmail(email);
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -103,25 +113,59 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, username: user.username, email: user.email },
-      process.env.JWT_SECRET || 'your-secret-key-change-in-production',
-      { expiresIn: '24h' }
-    );
+    const token = createToken(user);
 
     res.json({
       message: 'Login successful',
       token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email
-      }
+      user: getPublicUser(user)
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
   }
 });
+
+// OAuth - Google
+router.get(
+  '/oauth/google',
+  (req, res, next) => {
+    const { redirect } = req.query;
+    if (redirect && typeof redirect === 'string') {
+      if (redirect.startsWith('/')) {
+        req.session.redirectTo = redirect;
+      }
+    }
+    next();
+  },
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    prompt: 'select_account'
+  })
+);
+
+router.get(
+  '/oauth/google/callback',
+  passport.authenticate('google', {
+    failureRedirect: `${FRONTEND_URL}/login?error=google_auth_failed`
+  }),
+  (req, res) => {
+    const redirectTo = req.session.redirectTo && typeof req.session.redirectTo === 'string'
+      ? req.session.redirectTo
+      : '/dashboard';
+    delete req.session.redirectTo;
+
+    const user = getPublicUser(req.user);
+    const token = createToken(req.user);
+
+    const params = new URLSearchParams({
+      token,
+      user: Buffer.from(JSON.stringify(user)).toString('base64'),
+      redirect: redirectTo
+    });
+
+    res.redirect(`${FRONTEND_URL}/login?${params.toString()}`);
+  }
+);
 
 export default router;

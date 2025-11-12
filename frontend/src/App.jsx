@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import Interview from './pages/Interview.jsx';
 import './App.css';
 
 // Protected Route Component
@@ -14,6 +15,7 @@ function App() {
         <BrowserRouter>
             <Routes>
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/interview/:token" element={<Interview />} />
                 <Route 
                     path="/dashboard" 
                     element={

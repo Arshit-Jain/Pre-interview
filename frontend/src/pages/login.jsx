@@ -23,6 +23,44 @@ const LoginPage = () => {
         }
     }, [navigate, location]);
 
+    useEffect(() => {
+        if (!location.search) {
+            return;
+        }
+
+        const params = new URLSearchParams(location.search);
+        const tokenParam = params.get('token');
+        const errorParam = params.get('error');
+
+        if (errorParam) {
+            setError(errorParam.replace(/_/g, ' '));
+        }
+
+        if (tokenParam) {
+            const redirectParam = params.get('redirect');
+            const encodedUser = params.get('user');
+            let userFromOAuth = null;
+
+            if (encodedUser) {
+                try {
+                    userFromOAuth = JSON.parse(window.atob(encodedUser));
+                } catch (decodeError) {
+                    console.error('Failed to decode OAuth user payload', decodeError);
+                }
+            }
+
+            localStorage.setItem('token', tokenParam);
+            if (userFromOAuth) {
+                localStorage.setItem('user', JSON.stringify(userFromOAuth));
+            }
+
+            const redirectTo =
+                (redirectParam && redirectParam.startsWith('/')) ? redirectParam : '/dashboard';
+
+            navigate(redirectTo, { replace: true });
+        }
+    }, [location, navigate]);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
