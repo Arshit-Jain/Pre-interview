@@ -12,11 +12,9 @@ const router = express.Router();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 // Create interview invitation and send email (protected endpoint)
-// Create interview invitation and send email (protected endpoint)
 router.post('/invite', authenticateToken, async (req, res) => {
   try {
-    // 1. REMOVED 'expires_in_days' from here
-    const { role_id, candidate_email } = req.body;
+    const { role_id, candidate_email, expires_in_days } = req.body;
 
     // Validation
     if (!role_id || !candidate_email) {
@@ -33,9 +31,25 @@ router.post('/invite', authenticateToken, async (req, res) => {
       });
     }
 
-    // 2. ALL VALIDATION LOGIC for 'days' is REMOVED
-    // 3. 'days' is now HARDCODED to 7
-    const days = 7;
+    // Validate expires_in_days
+    let days = 7; // Default value
+    if (expires_in_days !== undefined && expires_in_days !== null) {
+      const parsedDays = Number(expires_in_days);
+      
+      if (isNaN(parsedDays)) {
+        return res.status(400).json({
+          message: 'expires_in_days must be a valid number'
+        });
+      }
+      
+      if (parsedDays < 1 || parsedDays > 30) {
+        return res.status(400).json({
+          message: 'expires_in_days must be between 1 and 30'
+        });
+      }
+      
+      days = parsedDays;
+    }
 
     // Get or create interview for this role
     const interview = await getOrCreateInterview(Number(role_id));
@@ -44,7 +58,7 @@ router.post('/invite', authenticateToken, async (req, res) => {
     const link = await createInterviewLink({
       candidate_email: candidate_email.trim(),
       interview_id: interview.id,
-      expires_in_days: days // This will now always be 7
+      expires_in_days: days
     });
 
     // Create candidate record if it doesn't exist
@@ -57,7 +71,7 @@ router.post('/invite', authenticateToken, async (req, res) => {
       });
     } catch (err) {
       // Candidate might already exist, try to get it
-      if (err.message.includes('already exists') || err.code === '23505') { // Added err.code
+      if (err.message.includes('already exists') || err.code === '23505') {
         candidate = await getCandidateByEmailAndRole(Number(role_id), candidate_email.trim());
       } else {
         throw err;
@@ -128,7 +142,7 @@ Interview Team`;
     console.error('Create interview invitation error:', error);
 
     if (error.message === 'Role not found') {
-      return res.status(440).json({ message: error.message });
+      return res.status(404).json({ message: error.message });
     }
 
     if (error.message.includes('already exists')) {
@@ -261,4 +275,3 @@ router.get('/role/:role_id/links', authenticateToken, async (req, res) => {
 });
 
 export default router;
-
