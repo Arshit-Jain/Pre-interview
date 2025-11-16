@@ -1,15 +1,26 @@
 import express from 'express';
+import multer from 'multer';
 import { authenticateToken } from '../middleware/auth.js';
 import { getOrCreateInterview } from '../models/interviewModel.js';
-import { createInterviewLink, validateInterviewLink, markLinkAsUsed, getInterviewLinksByInterview } from '../models/interviewLinkModel.js';
+import { createInterviewLink, validateInterviewLink, validateInterviewLinkAllowUsed, markLinkAsUsed, getInterviewLinksByInterview } from '../models/interviewLinkModel.js';
 import { createCandidate, getCandidateByEmailAndRole, updateCandidateSubmission } from '../models/candidateModel.js';
+import { createVideoAnswer, getVideoAnswersByToken } from '../models/videoAnswerModel.js';
 import { sendEmail } from '../utils/emailService.js';
+import { uploadVideoToGCS, generateVideoFileName } from '../utils/gcsStorage.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const router = express.Router();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+// Configure multer for video uploads (in memory)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 500 * 1024 * 1024 * 5, // 2.5 GB limit
+  },
+});
 
 // Create interview invitation and send email (protected endpoint)
 router.post('/invite', authenticateToken, async (req, res) => {
@@ -184,7 +195,115 @@ router.get('/link/:token', async (req, res) => {
   }
 });
 
-// Submit interview (when candidate completes it)
+// Validate candidate info (when form is submitted, but don't mark link as used yet)
+router.post('/validate/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ 
+        message: 'name and email are required' 
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ 
+        message: 'Invalid email address format' 
+      });
+    }
+
+    // Validate and get the link (but don't mark as used)
+    const link = await validateInterviewLink(token);
+
+    // Verify email matches
+    if (link.candidate_email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({ 
+        message: 'Email does not match the invitation email' 
+      });
+    }
+
+    // Update candidate information (name)
+    const candidate = await getCandidateByEmailAndRole(link.role_id, email);
+    if (candidate) {
+      // Note: We'll mark as submitted later after camera test
+      // For now, just validate
+    }
+
+    res.json({
+      message: 'Candidate information validated successfully',
+      candidate: {
+        name: name,
+        email: email
+      }
+    });
+  } catch (error) {
+    console.error('Validate candidate error:', error);
+    
+    if (error.message.includes('Invalid') || error.message.includes('expired') || error.message.includes('used')) {
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Server error validating candidate' 
+    });
+  }
+});
+
+// Mark link as used (after camera test is completed)
+router.post('/mark-used/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ 
+        message: 'name and email are required' 
+      });
+    }
+
+    // Validate and get the link
+    const link = await validateInterviewLink(token);
+
+    // Verify email matches
+    if (link.candidate_email.toLowerCase() !== email.toLowerCase()) {
+      return res.status(400).json({ 
+        message: 'Email does not match the invitation email' 
+      });
+    }
+
+    // Update candidate information
+    const candidate = await getCandidateByEmailAndRole(link.role_id, email);
+    if (candidate) {
+      await updateCandidateSubmission(candidate.id, true);
+    }
+
+    // Mark link as used
+    await markLinkAsUsed(token);
+
+    res.json({
+      message: 'Interview link marked as used',
+      candidate: {
+        name: name,
+        email: email
+      }
+    });
+  } catch (error) {
+    console.error('Mark link as used error:', error);
+    
+    if (error.message.includes('Invalid') || error.message.includes('expired') || error.message.includes('used')) {
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Server error marking link as used' 
+    });
+  }
+});
+
+// Submit interview (when candidate completes it) - kept for backward compatibility
 router.post('/submit/:token', async (req, res) => {
   try {
     const { token } = req.params;
@@ -207,7 +326,7 @@ router.post('/submit/:token', async (req, res) => {
     // Validate and get the link
     const link = await validateInterviewLink(token);
 
-    // Verify email matches (optional - you might want to allow different emails)
+    // Verify email matches
     if (link.candidate_email.toLowerCase() !== email.toLowerCase()) {
       return res.status(400).json({ 
         message: 'Email does not match the invitation email' 
@@ -217,8 +336,6 @@ router.post('/submit/:token', async (req, res) => {
     // Update candidate information
     const candidate = await getCandidateByEmailAndRole(link.role_id, email);
     if (candidate) {
-      // Update candidate name if provided
-      // Note: You might want to add an update function for candidate name
       await updateCandidateSubmission(candidate.id, true);
     }
 
@@ -270,6 +387,107 @@ router.get('/role/:role_id/links', authenticateToken, async (req, res) => {
     console.error('Get interview links error:', error);
     res.status(500).json({ 
       message: error.message || 'Server error retrieving interview links' 
+    });
+  }
+});
+
+// Save video answer (public endpoint for candidates)
+router.post('/video-answer/:token', upload.single('video'), async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { question_id, candidate_email, recording_duration } = req.body;
+
+    if (!question_id || !candidate_email) {
+      return res.status(400).json({ 
+        message: 'question_id and candidate_email are required' 
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ 
+        message: 'Video file is required' 
+      });
+    }
+
+    // Validate the interview link (allow used links since we mark as used before questions)
+    const link = await validateInterviewLinkAllowUsed(token);
+
+    // Verify email matches
+    if (link.candidate_email.toLowerCase() !== candidate_email.toLowerCase()) {
+      return res.status(400).json({ 
+        message: 'Email does not match the invitation email' 
+      });
+    }
+
+    // Generate unique file name
+    const fileName = generateVideoFileName(token, question_id, candidate_email);
+
+    // Upload video to Google Cloud Storage
+    let videoUrl;
+    try {
+      videoUrl = await uploadVideoToGCS(req.file.buffer, fileName);
+      console.log(`Video uploaded to GCS: ${videoUrl}`);
+    } catch (gcsError) {
+      console.error('GCS upload error:', gcsError);
+      // Fallback: store as base64 if GCS fails (for development)
+      if (process.env.NODE_ENV === 'development') {
+        const base64Data = req.file.buffer.toString('base64');
+        videoUrl = `data:video/webm;base64,${base64Data}`;
+        console.warn('⚠️  GCS upload failed, storing as base64 (development mode)');
+      } else {
+        throw new Error('Failed to upload video to storage');
+      }
+    }
+
+    // Store video answer with GCS URL
+    const videoAnswer = await createVideoAnswer({
+      interview_link_token: token,
+      question_id: Number(question_id),
+      candidate_email: candidate_email.trim(),
+      video_url: videoUrl,
+      recording_duration: recording_duration ? Number(recording_duration) : null
+    });
+
+    res.json({
+      message: 'Video answer saved successfully',
+      video_answer: videoAnswer
+    });
+  } catch (error) {
+    console.error('Save video answer error:', error);
+    
+    if (error.message.includes('Invalid') || error.message.includes('expired')) {
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Server error saving video answer' 
+    });
+  }
+});
+
+// Get video answers for an interview (public endpoint for candidates)
+router.get('/video-answers/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Validate the interview link
+    await validateInterviewLink(token);
+
+    const videoAnswers = await getVideoAnswersByToken(token);
+
+    res.json({
+      message: 'Video answers retrieved successfully',
+      video_answers: videoAnswers
+    });
+  } catch (error) {
+    console.error('Get video answers error:', error);
+    
+    if (error.message.includes('Invalid') || error.message.includes('expired') || error.message.includes('used')) {
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Server error retrieving video answers' 
     });
   }
 });

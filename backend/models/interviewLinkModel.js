@@ -98,6 +98,24 @@ export async function validateInterviewLink(token) {
   return link;
 }
 
+// Validate link but allow used links (for fetching questions after marking as used)
+export async function validateInterviewLinkAllowUsed(token) {
+  const link = await getInterviewLinkByToken(token);
+
+  if (!link) {
+    throw new Error('Invalid interview link');
+  }
+
+  const now = new Date();
+  const expiresAt = new Date(link.expires_at);
+
+  if (now > expiresAt) {
+    throw new Error('This interview link has expired');
+  }
+
+  return link;
+}
+
 export async function markLinkAsUsed(token) {
   if (!token) {
     throw new Error('Token is required');

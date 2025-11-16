@@ -181,5 +181,40 @@ router.put('/role/:role_id/reorder', authenticateToken, async (req, res) => {
   }
 });
 
+// Get questions by interview token (public endpoint for candidates)
+router.get('/interview/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ 
+        message: 'Token is required' 
+      });
+    }
+
+    // First validate the interview link and get role_id (allow used links since we mark as used before fetching questions)
+    const { validateInterviewLinkAllowUsed } = await import('../models/interviewLinkModel.js');
+    const link = await validateInterviewLinkAllowUsed(token);
+
+    // Get questions for the role
+    const questions = await getQuestionsByRole(link.role_id);
+
+    res.json({
+      message: 'Questions retrieved successfully',
+      questions: questions.sort((a, b) => a.question_order - b.question_order)
+    });
+  } catch (error) {
+    console.error('Get questions by token error:', error);
+    
+    if (error.message.includes('Invalid') || error.message.includes('expired')) {
+      return res.status(400).json({ message: error.message });
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Server error retrieving questions' 
+    });
+  }
+});
+
 export default router;
 

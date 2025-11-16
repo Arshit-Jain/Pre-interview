@@ -31,6 +31,12 @@ CREATE TABLE candidates (
     CONSTRAINT unique_candidate_per_role UNIQUE (role_id, email)
 );
 
+CREATE TABLE interviews (
+  id SERIAL PRIMARY KEY,
+  role_id INT REFERENCES roles(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE interview_links (
   id SERIAL PRIMARY KEY,
   candidate_email VARCHAR(150) NOT NULL,
@@ -38,4 +44,16 @@ CREATE TABLE interview_links (
   unique_token UUID DEFAULT gen_random_uuid() UNIQUE,  -- unique random identifier
   expires_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP + INTERVAL '7 days',
   used BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE video_answers (
+  id SERIAL PRIMARY KEY,
+  interview_link_token UUID REFERENCES interview_links(unique_token) ON DELETE CASCADE,
+  question_id INT REFERENCES questions(id) ON DELETE CASCADE,
+  candidate_email VARCHAR(150) NOT NULL,
+  video_url TEXT,
+  video_blob BYTEA,
+  recording_duration INT, -- duration in seconds
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(interview_link_token, question_id)
 );
