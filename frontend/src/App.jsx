@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Interview from './pages/Interview.jsx';
+import AllResponses from './pages/AllResponses.jsx';
 import './App.css';
 
 // Protected Route Component
@@ -21,6 +22,22 @@ function App() {
                     element={
                         <ProtectedRoute>
                             <Dashboard />
+                        </ProtectedRoute>
+                    } 
+                />
+                <Route 
+                    path="/responses" 
+                    element={
+                        <ProtectedRoute>
+                            <AllResponses />
+                        </ProtectedRoute>
+                    } 
+                />
+                <Route 
+                    path="/responses/:token" 
+                    element={
+                        <ProtectedRoute>
+                            <AllResponses />
                         </ProtectedRoute>
                     } 
                 />

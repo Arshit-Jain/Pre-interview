@@ -4,6 +4,7 @@ import axios from 'axios';
 import RoleForm from '../components/RoleForm';
 import RoleList from '../components/RoleList';
 import InviteCandidate from '../components/InviteCandidate';
+import RecentResponses from '../components/RecentResponses';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -140,6 +141,9 @@ const Dashboard = () => {
                             }}>
                                 <p>Please log in with OAuth to create roles, or contact an administrator to set up your interviewer account.</p>
                             </div>
+                        )}
+                        {interviewerId && (
+                            <RecentResponses interviewerId={interviewerId} />
                         )}
                         <RoleList 
                             interviewerId={interviewerId} 

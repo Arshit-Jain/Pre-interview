@@ -92,6 +92,9 @@ if (!bucketName) {
   console.warn('⚠️  GCS_BUCKET_NAME not set. Video uploads will fail.');
 }
 
+// Export storage and bucketName for use in other modules
+export { storage, bucketName as gcsBucketName };
+
 /**
  * Upload video to Google Cloud Storage
  * @param {Buffer} videoBuffer - Video file buffer
@@ -182,5 +185,59 @@ export function generateVideoFileName(interviewToken, questionId, candidateEmail
   const timestamp = Date.now();
   const emailSlug = candidateEmail.replace(/[^a-zA-Z0-9]/g, '-');
   return `interviews/${interviewToken}/${questionId}-${emailSlug}-${timestamp}.webm`;
+}
+
+/**
+ * Get a readable stream for a video file from GCS
+ * @param {string} fileName - Name/path of the file in GCS
+ * @returns {Promise<ReadableStream>} Stream of the video file
+ */
+export async function getVideoStreamFromGCS(fileName) {
+  if (!bucketName) {
+    throw new Error('GCS_BUCKET_NAME is not configured');
+  }
+
+  if (!storage) {
+    throw new Error('Google Cloud Storage is not properly initialized');
+  }
+
+  try {
+    const bucket = storage.bucket(bucketName);
+    const file = bucket.file(fileName);
+    
+    // Check if file exists
+    const [exists] = await file.exists();
+    if (!exists) {
+      throw new Error('Video file not found in GCS');
+    }
+
+    // Return a readable stream
+    return file.createReadStream();
+  } catch (error) {
+    console.error('Error getting video stream from GCS:', error);
+    throw new Error(`Failed to get video from Google Cloud Storage: ${error.message}`);
+  }
+}
+
+/**
+ * Extract file name from a GCS URL
+ * @param {string} url - Full GCS URL
+ * @returns {string} File name/path in bucket
+ */
+export function extractFileNameFromUrl(url) {
+  if (!url) return null;
+  
+  // Handle URLs like: https://storage.googleapis.com/bucket-name/path/to/file.webm
+  const match = url.match(/https?:\/\/storage\.googleapis\.com\/[^\/]+\/(.+)/);
+  if (match) {
+    return match[1];
+  }
+  
+  // If it's already a path (not a full URL), return as is
+  if (!url.startsWith('http')) {
+    return url;
+  }
+  
+  return null;
 }
 

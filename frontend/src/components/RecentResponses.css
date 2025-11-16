@@ -1,0 +1,139 @@
+.recent-responses-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.responses-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.responses-header h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.5rem;
+}
+
+.view-all-button {
+    padding: 0.5rem 1.5rem;
+    background: rgba(100, 108, 255, 0.2);
+    color: #646cff;
+    border: 1px solid rgba(100, 108, 255, 0.3);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.view-all-button:hover {
+    background: rgba(100, 108, 255, 0.3);
+    border-color: rgba(100, 108, 255, 0.5);
+    transform: translateY(-2px);
+}
+
+.responses-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.response-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.response-card:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(100, 108, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.response-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.response-header h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.1rem;
+    flex: 1;
+}
+
+.role-badge {
+    background: rgba(100, 108, 255, 0.2);
+    color: #646cff;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-left: 0.5rem;
+}
+
+.response-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.response-email {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+.response-meta {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.separator {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.loading-message,
+.no-responses {
+    text-align: center;
+    padding: 2rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.error-message {
+    padding: 1rem;
+    background: rgba(255, 0, 0, 0.2);
+    border: 1px solid rgba(255, 0, 0, 0.5);
+    border-radius: 8px;
+    color: #ff6b6b;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .responses-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .responses-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+}
+

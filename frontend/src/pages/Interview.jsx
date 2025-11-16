@@ -26,7 +26,7 @@ const Interview = () => {
     // Questions state
     const [questions, setQuestions] = useState([]);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [questionTimer, setQuestionTimer] = useState(600); // 10 minutes in seconds
+    const [questionTimer, setQuestionTimer] = useState(600);
     const [isQuestionRecording, setIsQuestionRecording] = useState(false);
     const [questionRecordedVideo, setQuestionRecordedVideo] = useState(null);
     const [questionRecordingTime, setQuestionRecordingTime] = useState(0);
@@ -75,7 +75,6 @@ const Interview = () => {
         }
     }, [token, backendUrl]);
 
-    // Ensure video stream is set when camera test starts
     useEffect(() => {
         if (cameraTestStarted && streamRef.current && testVideoRef.current) {
             if (!testVideoRef.current.srcObject || testVideoRef.current.srcObject !== streamRef.current) {
@@ -87,13 +86,11 @@ const Interview = () => {
         }
     }, [cameraTestStarted]);
 
-    // Ensure question video stream is set when available
     useEffect(() => {
         if (questionStreamRef.current && questionVideoRef.current) {
-            // Always show live feed, never show recorded video
             if (!questionVideoRef.current.srcObject || questionVideoRef.current.srcObject !== questionStreamRef.current) {
                 questionVideoRef.current.srcObject = questionStreamRef.current;
-                questionVideoRef.current.src = ''; // Clear any recorded video source
+                questionVideoRef.current.src = '';
                 questionVideoRef.current.play().catch(err => {
                     console.error('Error playing question video:', err);
                 });
@@ -101,13 +98,10 @@ const Interview = () => {
         }
     }, [currentQuestionIndex, isQuestionRecording]);
 
-    // Auto-start recording when questions are loaded or when moving to next question
     useEffect(() => {
         if (questions.length > 0 && !allQuestionsCompleted && currentQuestionIndex < questions.length) {
-            // Start camera and recording automatically
             const autoStart = async () => {
                 try {
-                    // Start camera stream first
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         video: true, 
                         audio: true 
@@ -120,10 +114,8 @@ const Interview = () => {
                         });
                     }
 
-                    // Wait a bit for camera to initialize, then start recording
                     setTimeout(() => {
                         if (questionStreamRef.current && !isQuestionRecording && !questionRecordedVideo && questionMediaRecorderRef.current === null) {
-                            // Start recording using the existing stream
                             const mediaRecorder = new MediaRecorder(questionStreamRef.current);
                             const chunks = [];
 
@@ -135,12 +127,7 @@ const Interview = () => {
 
                             mediaRecorder.onstop = async () => {
                                 const blob = new Blob(chunks, { type: 'video/webm' });
-                                setQuestionRecordedVideo(blob); // Store blob, don't switch video element
-                                
-                                // Keep showing live feed - don't switch to recorded video
-                                // The video element will continue showing the live stream
-                                
-                                // Upload video directly as blob to Google Cloud Storage
+                                setQuestionRecordedVideo(blob);
                                 await saveVideoAnswer(blob, questionRecordingTime);
                             };
 
@@ -163,14 +150,12 @@ const Interview = () => {
                 }
             };
 
-            // Only auto-start if not already recording and no video recorded for this question
             if (!isQuestionRecording && !questionRecordedVideo && !questionStreamRef.current) {
                 autoStart();
             }
         }
     }, [questions.length, currentQuestionIndex, allQuestionsCompleted, isQuestionRecording, questionRecordedVideo]);
 
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -194,10 +179,11 @@ const Interview = () => {
             });
             streamRef.current = stream;
             setCameraTestStarted(true);
-            // Use setTimeout to ensure the video element is rendered before setting srcObject
             setTimeout(() => {
                 if (testVideoRef.current) {
                     testVideoRef.current.srcObject = stream;
+                    testVideoRef.current.src = ''; // Clear any previous recorded video
+                    testVideoRef.current.controls = false; // Remove controls for live view
                     testVideoRef.current.play().catch(err => {
                         console.error('Error playing video:', err);
                     });
@@ -226,17 +212,15 @@ const Interview = () => {
             const videoUrl = URL.createObjectURL(blob);
             setRecordedVideo(videoUrl);
             
-            // Stop the camera stream
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
             }
             
-            // Update video element to show recorded video
             if (testVideoRef.current) {
                 testVideoRef.current.srcObject = null;
                 testVideoRef.current.src = videoUrl;
                 testVideoRef.current.controls = true;
-                testVideoRef.current.load(); // Reload the video element
+                testVideoRef.current.load();
             }
             
             isTestRecordingRef.current = false;
@@ -248,7 +232,6 @@ const Interview = () => {
         isTestRecordingRef.current = true;
         setRecordingTime(0);
 
-        // 30 second timer
         const interval = setInterval(() => {
             setRecordingTime((prev) => {
                 if (prev >= 29) {
@@ -273,7 +256,6 @@ const Interview = () => {
                 clearInterval(recordingIntervalRef.current);
             }
             
-            // Stop camera stream immediately
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach(track => track.stop());
                 streamRef.current = null;
@@ -292,13 +274,11 @@ const Interview = () => {
     const handleProceedToQuestions = async () => {
         setShowWarning(false);
         
-        // Stop test camera stream
         if (streamRef.current) {
             streamRef.current.getTracks().forEach(track => track.stop());
             streamRef.current = null;
         }
 
-        // Mark link as used now (after camera test is completed)
         try {
             await axios.post(
                 `${backendUrl}/api/interviews/mark-used/${token}`,
@@ -314,10 +294,8 @@ const Interview = () => {
             );
         } catch (err) {
             console.error('Failed to mark link as used:', err);
-            // Continue anyway, but log the error
         }
 
-        // Fetch questions
         try {
             const response = await axios.get(
                 `${backendUrl}/api/questions/interview/${token}`
@@ -325,7 +303,6 @@ const Interview = () => {
             const fetchedQuestions = response.data.questions || [];
             setQuestions(fetchedQuestions);
             
-            // Start first question timer
             if (fetchedQuestions.length > 0) {
                 startQuestionTimer();
             }
@@ -336,7 +313,7 @@ const Interview = () => {
     };
 
     const startQuestionTimer = () => {
-        setQuestionTimer(600); // Reset to 10 minutes
+        setQuestionTimer(600);
         if (questionTimerIntervalRef.current) {
             clearInterval(questionTimerIntervalRef.current);
         }
@@ -345,7 +322,6 @@ const Interview = () => {
             setQuestionTimer((prev) => {
                 if (prev <= 1) {
                     clearInterval(questionTimerIntervalRef.current);
-                    // Auto-stop recording if timer reaches 0
                     if (isRecordingRef.current && questionMediaRecorderRef.current) {
                         stopQuestionRecording();
                     }
@@ -354,62 +330,6 @@ const Interview = () => {
                 return prev - 1;
             });
         }, 1000);
-    };
-
-    const startQuestionRecording = async () => {
-        try {
-            // Only get new stream if we don't have one
-            if (!questionStreamRef.current) {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: true, 
-                    audio: true 
-                });
-                questionStreamRef.current = stream;
-                if (questionVideoRef.current) {
-                    questionVideoRef.current.srcObject = stream;
-                    questionVideoRef.current.play().catch(err => {
-                        console.error('Error playing video:', err);
-                    });
-                }
-            }
-
-            // Use existing stream for recording
-            const stream = questionStreamRef.current;
-            const mediaRecorder = new MediaRecorder(stream);
-            const chunks = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    chunks.push(e.data);
-                }
-            };
-
-            mediaRecorder.onstop = async () => {
-                const blob = new Blob(chunks, { type: 'video/webm' });
-                setQuestionRecordedVideo(blob); // Store blob, don't switch video element
-                
-                // Keep showing live feed - don't switch to recorded video
-                // The video element will continue showing the live stream
-                
-                // Upload video directly as blob to Google Cloud Storage
-                await saveVideoAnswer(blob, questionRecordingTime);
-            };
-
-            questionMediaRecorderRef.current = mediaRecorder;
-            mediaRecorder.start();
-            setIsQuestionRecording(true);
-            isRecordingRef.current = true;
-            setQuestionRecordingTime(0);
-
-            const interval = setInterval(() => {
-                setQuestionRecordingTime((prev) => prev + 1);
-            }, 1000);
-
-            questionRecordingIntervalRef.current = interval;
-        } catch (err) {
-            setError('Failed to access camera. Please grant permissions.');
-            console.error('Camera access error:', err);
-        }
     };
 
     const stopQuestionRecording = () => {
@@ -432,7 +352,6 @@ const Interview = () => {
         if (!currentQuestion) return;
 
         try {
-            // Create FormData to send video file
             const formData = new FormData();
             formData.append('video', videoBlob, `question-${currentQuestion.id}.webm`);
             formData.append('question_id', currentQuestion.id);
@@ -460,44 +379,36 @@ const Interview = () => {
     };
 
     const goToNextQuestion = async () => {
-        // Stop current recording if active
         if (isQuestionRecording) {
             stopQuestionRecording();
         }
 
-        // Stop current stream
         if (questionStreamRef.current) {
             questionStreamRef.current.getTracks().forEach(track => track.stop());
             questionStreamRef.current = null;
         }
 
-        // Clear video element to remove any recorded video
         if (questionVideoRef.current) {
             questionVideoRef.current.srcObject = null;
             questionVideoRef.current.src = '';
             questionVideoRef.current.load();
         }
 
-        // Reset state for next question
         setQuestionRecordedVideo(null);
         setIsQuestionRecording(false);
         isRecordingRef.current = false;
         setQuestionRecordingTime(0);
         questionMediaRecorderRef.current = null;
 
-        // Move to next question
         if (currentQuestionIndex < questions.length - 1) {
             setCurrentQuestionIndex(currentQuestionIndex + 1);
-            // Start timer for next question
             startQuestionTimer();
-            // Auto-start recording will be triggered by useEffect
         } else {
-            // All questions completed
+            // Mark as completed
             setAllQuestionsCompleted(true);
             if (questionTimerIntervalRef.current) {
                 clearInterval(questionTimerIntervalRef.current);
             }
-            // Stop any remaining streams
             if (questionStreamRef.current) {
                 questionStreamRef.current.getTracks().forEach(track => track.stop());
                 questionStreamRef.current = null;
@@ -524,7 +435,6 @@ const Interview = () => {
         }
 
         try {
-            // Only validate and update candidate info, don't mark link as used yet
             await axios.post(
                 `${backendUrl}/api/interviews/validate/${token}`,
                 {
@@ -591,7 +501,27 @@ const Interview = () => {
         );
     }
 
-    // Show form if not submitted
+    // Show completion screen FIRST - this is the fix for issue #1
+    if (allQuestionsCompleted || (questions.length > 0 && currentQuestionIndex >= questions.length)) {
+        return (
+            <div className="interview-container">
+                <div className="interview-card">
+                    <div className="success-icon">✓</div>
+                    <h1>Your Response Has Been Submitted</h1>
+                    <p>Thank you for completing the interview!</p>
+                    <p className="submitted-info">
+                        <strong>Name:</strong> {name}<br />
+                        <strong>Email:</strong> {email}
+                    </p>
+                    <p>All your video answers have been successfully recorded and saved.</p>
+                    <p style={{ marginTop: '2rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>
+                        You can now close this window.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     if (!formSubmitted) {
         return (
             <div className="interview-container">
@@ -653,7 +583,6 @@ const Interview = () => {
         );
     }
 
-    // Show camera test if form submitted but test not started
     if (!cameraTestStarted) {
         return (
             <div className="interview-container">
@@ -675,10 +604,9 @@ const Interview = () => {
         );
     }
 
-    // Show questions interface FIRST (before camera test preview)
     if (questions.length > 0 && !allQuestionsCompleted) {
         const currentQuestion = questions[currentQuestionIndex];
-        if (!currentQuestion) return null; // Safety check
+        if (!currentQuestion) return null;
         
         const isLastQuestion = currentQuestionIndex === questions.length - 1;
         const hasRecorded = questionRecordedVideo !== null;
@@ -732,7 +660,6 @@ const Interview = () => {
                             <button 
                                 className="submit-button"
                                 onClick={() => {
-                                    // Stop recording if currently recording, then move to next question
                                     if (isQuestionRecording) {
                                         stopQuestionRecording();
                                     }
@@ -748,7 +675,6 @@ const Interview = () => {
         );
     }
 
-    // Show warning modal
     if (showWarning) {
         return (
             <div className="interview-container">
@@ -778,9 +704,7 @@ const Interview = () => {
         );
     }
 
-    // Show camera test recording interface or preview
     if (cameraTestStarted && !showWarning) {
-        // If video is recorded, show preview screen
         if (recordedVideo) {
             return (
                 <div className="interview-container">
@@ -805,9 +729,10 @@ const Interview = () => {
                                 <button 
                                     className="submit-button secondary-button"
                                     onClick={async () => {
-                                        // Reset and allow re-recording
+                                        // Reset states
                                         setRecordedVideo(null);
                                         setIsRecording(false);
+                                        setRecordingTime(0);
                                         
                                         // Stop any existing stream
                                         if (streamRef.current) {
@@ -815,19 +740,31 @@ const Interview = () => {
                                             streamRef.current = null;
                                         }
                                         
-                                        // Start camera again
+                                        // Clear the video element completely
+                                        if (testVideoRef.current) {
+                                            testVideoRef.current.srcObject = null;
+                                            testVideoRef.current.src = '';
+                                            testVideoRef.current.controls = false;
+                                            testVideoRef.current.load();
+                                        }
+                                        
+                                        // Start camera again with a fresh stream
                                         try {
                                             const stream = await navigator.mediaDevices.getUserMedia({ 
                                                 video: true, 
                                                 audio: true 
                                             });
                                             streamRef.current = stream;
-                                            if (testVideoRef.current) {
-                                                testVideoRef.current.srcObject = stream;
-                                                testVideoRef.current.play().catch(err => {
-                                                    console.error('Error playing video:', err);
-                                                });
-                                            }
+                                            
+                                            // Wait a moment before setting the new stream
+                                            setTimeout(() => {
+                                                if (testVideoRef.current) {
+                                                    testVideoRef.current.srcObject = stream;
+                                                    testVideoRef.current.play().catch(err => {
+                                                        console.error('Error playing video:', err);
+                                                    });
+                                                }
+                                            }, 100);
                                         } catch (err) {
                                             setError('Failed to access camera. Please grant permissions.');
                                             console.error('Camera access error:', err);
@@ -849,7 +786,6 @@ const Interview = () => {
             );
         }
         
-        // Otherwise show recording interface
         return (
             <div className="interview-container">
                 <div className="interview-card">
@@ -906,27 +842,6 @@ const Interview = () => {
                             </div>
                         )}
                     </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Show completion screen
-    if (allQuestionsCompleted || (questions.length > 0 && currentQuestionIndex >= questions.length)) {
-        return (
-            <div className="interview-container">
-                <div className="interview-card">
-                    <div className="success-icon">✓</div>
-                    <h1>Your Response Has Been Submitted</h1>
-                    <p>Thank you for completing the interview!</p>
-                    <p className="submitted-info">
-                        <strong>Name:</strong> {name}<br />
-                        <strong>Email:</strong> {email}
-                    </p>
-                    <p>All your video answers have been successfully recorded and saved.</p>
-                    <p style={{ marginTop: '2rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>
-                        You can now close this window.
-                    </p>
                 </div>
             </div>
         );

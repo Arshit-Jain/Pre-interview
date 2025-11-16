@@ -106,3 +106,19 @@ export async function getAllRoles() {
   return result;
 }
 
+export async function getRoleById(role_id) {
+  if (!role_id) {
+    throw new Error('role_id is required');
+  }
+
+  const result = await sql`
+    SELECT r.*, i.name as interviewer_name, i.email as interviewer_email
+    FROM roles r
+    JOIN interviewers i ON r.interviewer_id = i.id
+    WHERE r.id = ${role_id}
+    LIMIT 1
+  `;
+
+  return result.length > 0 ? result[0] : null;
+}
+
