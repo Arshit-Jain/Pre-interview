@@ -49,6 +49,22 @@ const Interview = () => {
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
 
+    // Define preferred MIME type
+    const preferredMimeType = 'video/mp4';
+    const fallbackMimeType = 'video/webm';
+
+    const getSupportedMimeType = () => {
+        if (MediaRecorder.isTypeSupported(preferredMimeType)) {
+            return preferredMimeType;
+        }
+        return fallbackMimeType;
+    };
+
+    const getFileExtension = (mimeType) => {
+        return mimeType === preferredMimeType ? 'mp4' : 'webm';
+    };
+
+
     useEffect(() => {
         const validateLink = async () => {
             try {
@@ -116,7 +132,8 @@ const Interview = () => {
 
                     setTimeout(() => {
                         if (questionStreamRef.current && !isQuestionRecording && !questionRecordedVideo && questionMediaRecorderRef.current === null) {
-                            const mediaRecorder = new MediaRecorder(questionStreamRef.current);
+                            const mimeType = getSupportedMimeType();
+                            const mediaRecorder = new MediaRecorder(questionStreamRef.current, { mimeType });
                             const chunks = [];
 
                             mediaRecorder.ondataavailable = (e) => {
@@ -126,7 +143,7 @@ const Interview = () => {
                             };
 
                             mediaRecorder.onstop = async () => {
-                                const blob = new Blob(chunks, { type: 'video/webm' });
+                                const blob = new Blob(chunks, { type: mimeType });
                                 setQuestionRecordedVideo(blob);
                                 await saveVideoAnswer(blob, questionRecordingTime);
                             };
@@ -198,7 +215,8 @@ const Interview = () => {
     const startTestRecording = () => {
         if (!streamRef.current) return;
 
-        const mediaRecorder = new MediaRecorder(streamRef.current);
+        const mimeType = getSupportedMimeType();
+        const mediaRecorder = new MediaRecorder(streamRef.current, { mimeType });
         const chunks = [];
 
         mediaRecorder.ondataavailable = (e) => {
@@ -208,7 +226,7 @@ const Interview = () => {
         };
 
         mediaRecorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
+            const blob = new Blob(chunks, { type: mimeType });
             const videoUrl = URL.createObjectURL(blob);
             setRecordedVideo(videoUrl);
             
@@ -352,8 +370,12 @@ const Interview = () => {
         if (!currentQuestion) return;
 
         try {
+            const mimeType = getSupportedMimeType();
+            const extension = getFileExtension(mimeType);
+            const fileName = `question-${currentQuestion.id}.${extension}`;
+
             const formData = new FormData();
-            formData.append('video', videoBlob, `question-${currentQuestion.id}.webm`);
+            formData.append('video', videoBlob, fileName);
             formData.append('question_id', currentQuestion.id);
             formData.append('candidate_email', email);
             formData.append('recording_duration', duration);

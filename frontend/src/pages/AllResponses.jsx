@@ -14,8 +14,9 @@ const AllResponses = () => {
     const [selectedResponse, setSelectedResponse] = useState(null);
     const [videoAnswers, setVideoAnswers] = useState([]);
     const [loadingAnswers, setLoadingAnswers] = useState(false);
+    const [videoBlobUrls, setVideoBlobUrls] = useState({});
     const [stitchedVideoUrl, setStitchedVideoUrl] = useState(null);
-    const [currentPlayingIndex, setCurrentPlayingIndex] = useState(0);
+    const [stitching, setStitching] = useState(false);
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
 
@@ -25,9 +26,9 @@ const AllResponses = () => {
         if (!token) {
             fetchResponses();
         } else {
-            // If we have a token, we're viewing a specific response, so set loading to false
             console.log('[AllResponses] Token present, setting loading to false');
             setLoading(false);
+            fetchVideoAnswers(token);
         }
     }, []);
 
@@ -37,6 +38,52 @@ const AllResponses = () => {
             fetchVideoAnswers(token);
         }
     }, [token]);
+
+    useEffect(() => {
+        if (videoAnswers.length > 0) {
+            const fetchVideoBlobs = async () => {
+                const authToken = localStorage.getItem('token');
+                if (!authToken) {
+                    setError('Authentication token not found. Cannot load videos.');
+                    return;
+                }
+
+                const blobUrlMap = {};
+                for (const answer of videoAnswers) {
+                    if (answer.video_url) {
+                        try {
+                            const response = await axios.get(
+                                `${backendUrl}/api/interviews/video-proxy?url=${encodeURIComponent(answer.video_url)}`,
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${authToken}`
+                                    },
+                                    responseType: 'blob'
+                                }
+                            );
+                            const mimeType = response.headers['content-type'] || getMimeTypeFromUrl(answer.video_url);
+                            const blob = new Blob([response.data], { type: mimeType });
+                            blobUrlMap[answer.id] = URL.createObjectURL(blob);
+                        } catch (err) {
+                            console.error(`[AllResponses] Failed to fetch video blob for answer ${answer.id}:`, err);
+                            blobUrlMap[answer.id] = null;
+                        }
+                    }
+                }
+                setVideoBlobUrls(blobUrlMap);
+            };
+            fetchVideoBlobs();
+        }
+
+        return () => {
+            setVideoBlobUrls(prevUrls => {
+                Object.values(prevUrls).forEach(url => {
+                    if (url) URL.revokeObjectURL(url);
+                });
+                return {};
+            });
+        };
+    }, [videoAnswers, backendUrl]);
 
     useEffect(() => {
         if (!token) {
@@ -80,8 +127,6 @@ const AllResponses = () => {
         try {
             const token = localStorage.getItem('token');
             const params = selectedRoleId !== 'all' ? { role_id: selectedRoleId } : {};
-            console.log('[AllResponses] Making API request with params:', params);
-            const startTime = Date.now();
             
             const response = await axios.get(
                 `${backendUrl}/api/interviews/responses`,
@@ -92,13 +137,8 @@ const AllResponses = () => {
                     }
                 }
             );
-
-            const endTime = Date.now();
-            console.log(`[AllResponses] API response received in ${endTime - startTime}ms`);
-            console.log(`[AllResponses] Received ${response.data.responses?.length || 0} responses`);
             
             setResponses(response.data.responses || []);
-            console.log('[AllResponses] Responses set in state');
         } catch (err) {
             console.error('[AllResponses] Error fetching responses:', err);
             if (err.response) {
@@ -108,17 +148,19 @@ const AllResponses = () => {
             }
         } finally {
             setLoading(false);
-            console.log('[AllResponses] Loading completed');
         }
     };
 
     const fetchVideoAnswers = async (interviewToken) => {
+        console.log('[AllResponses] fetchVideoAnswers called with token:', interviewToken);
         setLoadingAnswers(true);
+        setLoading(false);
         setStitchedVideoUrl(null);
         setError('');
 
         try {
             const authToken = localStorage.getItem('token');
+            
             const response = await axios.get(
                 `${backendUrl}/api/interviews/responses/${interviewToken}`,
                 {
@@ -127,15 +169,16 @@ const AllResponses = () => {
                     }
                 }
             );
-
-            const answers = response.data.video_answers || [];
-            setVideoAnswers(answers);
-            setSelectedResponse(response.data.interview);
             
-            // Prepare videos for sequential playback
-            await stitchVideos(answers);
+            const answers = response.data.video_answers || [];
+            const interviewData = response.data.interview;
+            
+            const filteredAnswers = answers.filter(a => a.interview_link_token === interviewToken);
+            
+            setVideoAnswers(filteredAnswers);
+            setSelectedResponse(interviewData);
         } catch (err) {
-            console.error('Failed to fetch video answers:', err);
+            console.error('[AllResponses] Failed to fetch video answers:', err);
             if (err.response) {
                 setError(err.response.data.message || 'Failed to load video answers');
             } else {
@@ -146,30 +189,30 @@ const AllResponses = () => {
         }
     };
 
-    const stitchVideos = async (answers) => {
-        if (!answers || answers.length === 0) {
-            setError('No video answers found');
-            return;
-        }
+    const handleStitchVideos = async () => {
+        console.log('[AllResponses] Starting video stitching...');
+        setStitching(true);
+        setError('');
 
         try {
-            // Filter and sort answers by question order
-            const validAnswers = answers
-                .filter(a => a.video_url)
-                .sort((a, b) => a.question_order - b.question_order);
-            
-            if (validAnswers.length === 0) {
-                setError('No valid video URLs found');
-                return;
-            }
+            const authToken = localStorage.getItem('token');
+            const response = await axios.post(
+                `${backendUrl}/api/interviews/stitch-video/${token}`,
+                {},
+                {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                }
+            );
 
-            // For now, we'll create a playlist that plays videos sequentially
-            // A full stitching solution would require server-side processing or a more complex client-side approach
-            // This creates a simple sequential playback experience
-            setStitchedVideoUrl('playlist'); // Special marker for playlist mode
+            console.log('[AllResponses] Stitched video URL:', response.data.stitched_url);
+            setStitchedVideoUrl(response.data.stitched_url);
         } catch (err) {
-            console.error('Error preparing videos:', err);
-            setError('Failed to prepare videos');
+            console.error('[AllResponses] Failed to stitch videos:', err);
+            setError(err.response?.data?.message || 'Failed to stitch videos together');
+        } finally {
+            setStitching(false);
         }
     };
 
@@ -189,6 +232,28 @@ const AllResponses = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         navigate('/login');
+    };
+
+    const getMimeTypeFromUrl = (url) => {
+        if (!url) return null;
+        try {
+            const parsedUrl = new URL(url); 
+            const pathname = parsedUrl.pathname;
+            const extension = pathname.split('.').pop().toLowerCase();
+            
+            switch (extension) {
+                case 'webm':
+                    return 'video/webm';
+                case 'mp4':
+                    return 'video/mp4';
+                case 'ogv':
+                    return 'video/ogg';
+                default:
+                    return 'video/mp4'; 
+            }
+        } catch (e) {
+            return 'video/mp4';
+        }
     };
 
     if (loading) {
@@ -249,7 +314,6 @@ const AllResponses = () => {
                             setSelectedResponse(null);
                             setVideoAnswers([]);
                             setStitchedVideoUrl(null);
-                            setCurrentPlayingIndex(0);
                             navigate('/responses');
                         }}
                     >
@@ -265,64 +329,75 @@ const AllResponses = () => {
 
                     {loadingAnswers ? (
                         <div className="loading-message">Loading video answers...</div>
+                    ) : error ? (
+                        <div className="error-message">{error}</div>
                     ) : videoAnswers.length > 0 ? (
                         <div className="video-answers-section">
-                            <h3>Individual Answers</h3>
+                            <h3>Individual Answers ({videoAnswers.length} total)</h3>
                             <div className="individual-videos">
-                                {videoAnswers.map((answer, index) => (
-                                    <div key={answer.id} className="answer-item">
-                                        <h4>Question {answer.question_order}: {answer.question_text}</h4>
-                                        {answer.video_url && (
-                                            <video 
-                                                src={answer.video_url}
-                                                controls
-                                                className="answer-video"
-                                            />
-                                        )}
-                                        <p className="answer-meta">
-                                            Duration: {answer.recording_duration ? formatTime(answer.recording_duration) : 'N/A'}
-                                        </p>
-                                    </div>
-                                ))}
+                                {videoAnswers
+                                    .filter(a => a.interview_link_token === (token || selectedResponse?.token))
+                                    .sort((a, b) => a.question_order - b.question_order)
+                                    .map((answer) => (
+                                        <div key={`answer-${answer.id}-${answer.question_id}`} className="answer-item">
+                                            <h4>Question {answer.question_order}: {answer.question_text}</h4>
+                                            {answer.video_url ? (
+                                                videoBlobUrls[answer.id] === null ? (
+                                                    <div className="no-video">Error loading video</div>
+                                                ) : videoBlobUrls[answer.id] ? (
+                                                    <video 
+                                                        key={`video-${answer.id}-${answer.question_id}`}
+                                                        src={videoBlobUrls[answer.id]}
+                                                        type={getMimeTypeFromUrl(answer.video_url)}
+                                                        controls
+                                                        className="answer-video"
+                                                        preload="metadata"
+                                                    />
+                                                ) : (
+                                                    <div className="no-video">Loading video...</div>
+                                                )
+                                            ) : (
+                                                <div className="no-video">Video URL not available</div>
+                                            )}
+                                            <p className="answer-meta">
+                                                Duration: {answer.recording_duration ? formatTime(answer.recording_duration) : 'N/A'}
+                                            </p>
+                                        </div>
+                                    ))}
                             </div>
 
                             <div className="stitched-video-section">
-                                <h3>Complete Interview (Sequential Playback)</h3>
-                                {stitchedVideoUrl === 'playlist' && videoAnswers.length > 0 ? (
-                                    <div className="video-playlist">
-                                        {videoAnswers
-                                            .filter(a => a.video_url)
-                                            .sort((a, b) => a.question_order - b.question_order)
-                                            .map((answer, index) => (
-                                                <div key={answer.id} className="playlist-item">
-                                                    <h4>Question {answer.question_order}: {answer.question_text}</h4>
-                                                    <video 
-                                                        src={answer.video_url}
-                                                        controls
-                                                        className="playlist-video"
-                                                        onEnded={() => {
-                                                            if (index < videoAnswers.length - 1) {
-                                                                setCurrentPlayingIndex(index + 1);
-                                                            }
-                                                        }}
-                                                        autoPlay={index === currentPlayingIndex && index === 0}
-                                                    />
-                                                </div>
-                                            ))}
+                                <h3>Complete Interview (Single Video)</h3>
+                                
+                                {stitching ? (
+                                    <div className="loading-message">
+                                        <div className="spinner"></div>
+                                        <p>Stitching videos together... This may take a few minutes.</p>
                                     </div>
                                 ) : stitchedVideoUrl ? (
                                     <video 
                                         src={stitchedVideoUrl}
                                         controls
                                         className="stitched-video"
+                                        crossOrigin="anonymous"
                                     />
                                 ) : (
-                                    <div className="loading-message">Preparing videos...</div>
+                                    <div className="stitch-prompt">
+                                        <p>Click the button below to create a single combined video of all answers.</p>
+                                        <button 
+                                            className="stitch-button"
+                                            onClick={handleStitchVideos}
+                                        >
+                                            Create Combined Video
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>
                     ) : (
-                        <div className="no-answers">No video answers found for this interview.</div>
+                        <div className="no-answers">
+                            <p>No video answers found for this interview.</p>
+                        </div>
                     )}
                 </div>
             ) : (
@@ -369,4 +444,3 @@ const formatTime = (seconds) => {
 };
 
 export default AllResponses;
-

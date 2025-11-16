@@ -11,6 +11,17 @@ import dotenv from 'dotenv';
 import { getRoleById } from '../models/roleModel.js';
 import { findInterviewerByEmail } from '../models/interviewerModel.js';
 
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import os from 'os';
+
+const execAsync = promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
 const router = express.Router();
@@ -421,8 +432,11 @@ router.post('/video-answer/:token', upload.single('video'), async (req, res) => 
       });
     }
 
+    // Determine format from file name
+    const fileExtension = req.file.originalname.split('.').pop() || 'mp4';
+
     // Generate unique file name
-    const fileName = generateVideoFileName(token, question_id, candidate_email, 'mp4'); // Ensure video format is MP4 if possible
+    const fileName = generateVideoFileName(token, question_id, candidate_email, fileExtension);
 
     // Upload video to Google Cloud Storage
     let videoUrl;
@@ -433,10 +447,10 @@ router.post('/video-answer/:token', upload.single('video'), async (req, res) => 
       console.error('GCS upload error:', gcsError);
       // Fallback: store as base64 if GCS fails (for development)
       if (process.env.NODE_ENV === 'development') {
-        // Changed fallback mimeType to video/mp4 for consistency
+        const mimeType = fileExtension === 'mp4' ? 'video/mp4' : 'video/webm';
         const base64Data = req.file.buffer.toString('base64');
-        videoUrl = `data:video/mp4;base64,${base64Data}`; 
-        console.warn('⚠️  GCS upload failed, storing as base64 (development mode)');
+        videoUrl = `data:${mimeType};base64,${base64Data}`; 
+        console.warn(`⚠️  GCS upload failed, storing as base64 (development mode) with type ${mimeType}`);
       } else {
         throw new Error('Failed to upload video to storage');
       }
@@ -849,6 +863,124 @@ router.get('/video-proxy', authenticateToken, async (req, res) => {
       // If a response was partially sent, just terminate it gracefully
       res.end();
     }
+  }
+});
+
+router.post('/stitch-video/:token', authenticateToken, async (req, res) => {
+  const startTime = Date.now();
+  console.log('[Stitch Video] Request received', { token: req.params.token });
+  
+  const tempDir = path.join(os.tmpdir(), `interview-${Date.now()}`);
+  
+  try {
+    const { token } = req.params;
+    const userEmail = req.user?.email;
+
+    if (!userEmail) {
+      return res.status(400).json({ message: 'User email not found in token' });
+    }
+
+    // Verify permissions
+    const interviewer = await findInterviewerByEmail(userEmail);
+    if (!interviewer) {
+      return res.status(404).json({ message: 'Interviewer not found' });
+    }
+
+    const link = await getInterviewLinkByToken(token);
+    if (!link) {
+      return res.status(404).json({ message: 'Interview not found' });
+    }
+
+    const role = await getRoleById(link.role_id);
+    if (!role || role.interviewer_id !== interviewer.id) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+
+    // Get all video answers
+    const videoAnswers = await getVideoAnswersForStitching(token);
+    
+    if (videoAnswers.length === 0) {
+      return res.status(404).json({ message: 'No video answers found' });
+    }
+
+    console.log('[Stitch Video] Found', videoAnswers.length, 'videos to stitch');
+
+    // Create temp directory
+    await fs.promises.mkdir(tempDir, { recursive: true });
+
+    // Download all videos from GCS to temp directory
+    const videoFiles = [];
+    const bucket = storage.bucket(gcsBucketName);
+    
+    for (const answer of videoAnswers) {
+      const fileName = extractFileNameFromUrl(answer.video_url);
+      const file = bucket.file(fileName);
+      const localPath = path.join(tempDir, `video_${answer.question_order}.mp4`);
+      
+      await file.download({ destination: localPath });
+      videoFiles.push(localPath);
+      console.log('[Stitch Video] Downloaded:', localPath);
+    }
+
+    // Create concat list for FFmpeg
+    const concatListPath = path.join(tempDir, 'concat.txt');
+    const concatContent = videoFiles.map(f => `file '${f}'`).join('\n');
+    await fs.promises.writeFile(concatListPath, concatContent);
+
+    // Output file
+    const outputPath = path.join(tempDir, 'stitched.mp4');
+
+    // Stitch videos using FFmpeg
+    console.log('[Stitch Video] Starting FFmpeg stitching...');
+    const ffmpegCommand = `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c copy "${outputPath}"`;
+    
+    try {
+      await execAsync(ffmpegCommand);
+      console.log('[Stitch Video] FFmpeg stitching completed');
+    } catch (error) {
+      console.error('[Stitch Video] FFmpeg error:', error);
+      throw new Error('Failed to stitch videos');
+    }
+
+    // Upload stitched video to GCS
+    const stitchedFileName = `interviews/${token}/stitched-${Date.now()}.mp4`;
+    const stitchedFile = bucket.file(stitchedFileName);
+    
+    await stitchedFile.save(await fs.promises.readFile(outputPath), {
+      metadata: {
+        contentType: 'video/mp4',
+      }
+    });
+
+    const stitchedUrl = `https://storage.googleapis.com/${gcsBucketName}/${stitchedFileName}`;
+    console.log('[Stitch Video] Uploaded stitched video:', stitchedUrl);
+
+    // Clean up temp files
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    
+    const totalTime = Date.now() - startTime;
+    console.log(`[Stitch Video] Total time: ${totalTime}ms`);
+
+    res.json({
+      message: 'Video stitched successfully',
+      stitched_url: stitchedUrl
+    });
+
+  } catch (error) {
+    console.error('[Stitch Video] Error:', error);
+    
+    // Clean up on error
+    try {
+      if (fs.existsSync(tempDir)) {
+        await fs.promises.rm(tempDir, { recursive: true, force: true });
+      }
+    } catch (cleanupError) {
+      console.error('[Stitch Video] Cleanup error:', cleanupError);
+    }
+    
+    res.status(500).json({ 
+      message: error.message || 'Failed to stitch videos' 
+    });
   }
 });
 

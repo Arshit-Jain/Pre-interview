@@ -98,7 +98,7 @@ export { storage, bucketName as gcsBucketName };
 /**
  * Upload video to Google Cloud Storage
  * @param {Buffer} videoBuffer - Video file buffer
- * @param {string} fileName - Name for the file (e.g., "interview-token-question-id-timestamp.webm")
+ * @param {string} fileName - Name for the file (e.g., "interview-token-question-id-timestamp.mp4")
  * @returns {Promise<string>} Public URL of the uploaded video
  */
 export async function uploadVideoToGCS(videoBuffer, fileName) {
@@ -114,12 +114,15 @@ export async function uploadVideoToGCS(videoBuffer, fileName) {
     const bucket = storage.bucket(bucketName);
     const file = bucket.file(fileName);
 
+    // Determine content type from filename
+    const contentType = fileName.endsWith('.mp4') ? 'video/mp4' : 'video/webm';
+
     // Upload the file
     // Note: If uniform bucket-level access is enabled, file-level permissions cannot be set
     // Access will be controlled by bucket-level IAM policies
     await file.save(videoBuffer, {
       metadata: {
-        contentType: 'video/webm',
+        contentType: contentType, // Use dynamic content type
         cacheControl: 'public, max-age=31536000',
       },
     });
@@ -179,12 +182,14 @@ export async function deleteVideoFromGCS(fileName) {
  * @param {string} interviewToken - Interview link token
  * @param {number} questionId - Question ID
  * @param {string} candidateEmail - Candidate email
+ * @param {string} format - File format (e.g., 'mp4' or 'webm')
  * @returns {string} Unique file name
  */
-export function generateVideoFileName(interviewToken, questionId, candidateEmail) {
+export function generateVideoFileName(interviewToken, questionId, candidateEmail, format = 'mp4') {
   const timestamp = Date.now();
   const emailSlug = candidateEmail.replace(/[^a-zA-Z0-9]/g, '-');
-  return `interviews/${interviewToken}/${questionId}-${emailSlug}-${timestamp}.webm`;
+  const safeFormat = format.startsWith('.') ? format.substring(1) : format; // Ensure no leading dot
+  return `interviews/${interviewToken}/${questionId}-${emailSlug}-${timestamp}.${safeFormat}`;
 }
 
 /**
@@ -240,4 +245,3 @@ export function extractFileNameFromUrl(url) {
   
   return null;
 }
-
