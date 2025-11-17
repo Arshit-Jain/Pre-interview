@@ -225,23 +225,31 @@ export async function getVideoStreamFromGCS(fileName) {
 }
 
 /**
- * Extract file name from a GCS URL
- * @param {string} url - Full GCS URL
+ * Extract file name from a GCS URL (handles both regular and signed URLs)
+ * @param {string} url - Full GCS URL (may include query parameters for signed URLs)
  * @returns {string} File name/path in bucket
  */
 export function extractFileNameFromUrl(url) {
   if (!url) return null;
   
-  // Handle URLs like: https://storage.googleapis.com/bucket-name/path/to/file.webm
-  const match = url.match(/https?:\/\/storage\.googleapis\.com\/[^\/]+\/(.+)/);
-  if (match) {
-    return match[1];
+  try {
+    // Parse the URL to separate path from query parameters
+    const parsedUrl = new URL(url);
+    
+    // Handle URLs like: https://storage.googleapis.com/bucket-name/path/to/file.mp4?GoogleAccessId=...
+    const match = parsedUrl.pathname.match(/^\/[^\/]+\/(.+)$/);
+    if (match) {
+      return match[1]; // Return just the file path without bucket name
+    }
+    
+    // Fallback: if it's already a path (not a full URL), return as is
+    if (!url.startsWith('http')) {
+      return url;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('[extractFileNameFromUrl] Error parsing URL:', error);
+    return null;
   }
-  
-  // If it's already a path (not a full URL), return as is
-  if (!url.startsWith('http')) {
-    return url;
-  }
-  
-  return null;
 }

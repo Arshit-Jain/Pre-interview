@@ -26,6 +26,7 @@ dotenv.config();
 
 const router = express.Router();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 
 // Configure multer for video uploads (in memory)
 const upload = multer({
@@ -869,118 +870,180 @@ router.get('/video-proxy', authenticateToken, async (req, res) => {
 router.post('/stitch-video/:token', authenticateToken, async (req, res) => {
   const startTime = Date.now();
   console.log('[Stitch Video] Request received', { token: req.params.token });
-  
+
   const tempDir = path.join(os.tmpdir(), `interview-${Date.now()}`);
-  
+
   try {
     const { token } = req.params;
     const userEmail = req.user?.email;
-
     if (!userEmail) {
       return res.status(400).json({ message: 'User email not found in token' });
     }
 
-    // Verify permissions
+    // Permission checks
     const interviewer = await findInterviewerByEmail(userEmail);
-    if (!interviewer) {
-      return res.status(404).json({ message: 'Interviewer not found' });
-    }
+    if (!interviewer) return res.status(404).json({ message: 'Interviewer not found' });
 
     const link = await getInterviewLinkByToken(token);
-    if (!link) {
-      return res.status(404).json({ message: 'Interview not found' });
-    }
+    if (!link) return res.status(404).json({ message: 'Interview not found' });
 
     const role = await getRoleById(link.role_id);
     if (!role || role.interviewer_id !== interviewer.id) {
       return res.status(403).json({ message: 'Permission denied' });
     }
 
-    // Get all video answers
+    // Get answers to stitch
     const videoAnswers = await getVideoAnswersForStitching(token);
-    
-    if (videoAnswers.length === 0) {
-      return res.status(404).json({ message: 'No video answers found' });
+    if (!videoAnswers || videoAnswers.length === 0) {
+      return res.status(404).json({ message: 'No video answers found to stitch' });
     }
 
-    console.log('[Stitch Video] Found', videoAnswers.length, 'videos to stitch');
+    // Sort by question order
+    const sortedAnswers = videoAnswers.sort((a, b) => a.question_order - b.question_order);
+    console.log('[Stitch Video] Found videos to stitch:', sortedAnswers.map(a => ({
+      order: a.question_order,
+      question: a.question_text,
+      url: a.video_url
+    })));
 
-    // Create temp directory
+    // Create temp dir
     await fs.promises.mkdir(tempDir, { recursive: true });
 
-    // Download all videos from GCS to temp directory
-    const videoFiles = [];
     const bucket = storage.bucket(gcsBucketName);
-    
-    for (const answer of videoAnswers) {
+    const localFiles = [];
+    const transcodePromises = [];
+
+    // Download and transcode each video to ensure compatibility
+    for (let i = 0; i < sortedAnswers.length; i++) {
+      const answer = sortedAnswers[i];
       const fileName = extractFileNameFromUrl(answer.video_url);
-      const file = bucket.file(fileName);
-      const localPath = path.join(tempDir, `video_${answer.question_order}.mp4`);
       
-      await file.download({ destination: localPath });
-      videoFiles.push(localPath);
-      console.log('[Stitch Video] Downloaded:', localPath);
+      if (!fileName) {
+        console.error('[Stitch Video] Invalid video URL:', answer.video_url);
+        throw new Error(`Invalid video URL for answer id ${answer.id}`);
+      }
+      
+      const file = bucket.file(fileName);
+
+      // Check if file exists
+      const [exists] = await file.exists();
+      if (!exists) {
+        console.error('[Stitch Video] File does not exist:', fileName);
+        throw new Error(`Source video missing: ${fileName}`);
+      }
+
+      // Download to temp location
+      const downloadPath = path.join(tempDir, `download_${i}.mp4`);
+      await file.download({ destination: downloadPath });
+      
+      // Verify downloaded file
+      const stats = await fs.promises.stat(downloadPath);
+      if (stats.size === 0) {
+        throw new Error(`Downloaded file is empty: ${downloadPath}`);
+      }
+      
+      console.log('[Stitch Video] Downloaded', downloadPath, `(${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+
+      // Transcode each video to ensure uniform format
+      // This is key - we re-encode each video to the same spec
+      const transcodedPath = path.join(tempDir, `video_${i}.mp4`);
+      
+      transcodePromises.push(
+        execAsync(
+          `ffmpeg -y -i "${downloadPath}" -c:v libx264 -preset medium -crf 23 -r 30 -s 1280x720 -c:a aac -ar 44100 -ac 2 -b:a 128k "${transcodedPath}"`,
+          { maxBuffer: 1024 * 1024 * 50 }
+        ).then(() => {
+          console.log('[Stitch Video] Transcoded video', i);
+          localFiles.push(transcodedPath);
+        })
+      );
     }
 
-    // Create concat list for FFmpeg
-    const concatListPath = path.join(tempDir, 'concat.txt');
-    const concatContent = videoFiles.map(f => `file '${f}'`).join('\n');
-    await fs.promises.writeFile(concatListPath, concatContent);
+    // Wait for all transcoding to complete
+    await Promise.all(transcodePromises);
+    
+    // Verify all files were transcoded successfully
+    if (localFiles.length !== sortedAnswers.length) {
+      throw new Error(`Expected ${sortedAnswers.length} videos but only transcoded ${localFiles.length}`);
+    }
 
-    // Output file
+    // Sort localFiles to ensure correct order
+    localFiles.sort();
+
+    console.log('[Stitch Video] All videos transcoded successfully');
+
+    // Build concat list
+    const concatListPath = path.join(tempDir, 'concat.txt');
+    const concatContent = localFiles.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+    await fs.promises.writeFile(concatListPath, concatContent);
+    
+    console.log('[Stitch Video] Concat list:', concatContent);
+
+    // Output path
     const outputPath = path.join(tempDir, 'stitched.mp4');
 
-    // Stitch videos using FFmpeg
-    console.log('[Stitch Video] Starting FFmpeg stitching...');
-    const ffmpegCommand = `ffmpeg -f concat -safe 0 -i "${concatListPath}" -c copy "${outputPath}"`;
+    // Run ffmpeg concat - since all inputs are now uniform, concat demuxer should work
+    const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${outputPath}"`;
+    console.log('[Stitch Video] Running ffmpeg:', ffmpegCmd);
     
     try {
-      await execAsync(ffmpegCommand);
-      console.log('[Stitch Video] FFmpeg stitching completed');
-    } catch (error) {
-      console.error('[Stitch Video] FFmpeg error:', error);
-      throw new Error('Failed to stitch videos');
+      const { stdout, stderr } = await execAsync(ffmpegCmd, { maxBuffer: 1024 * 1024 * 50 });
+      console.log('[Stitch Video] ffmpeg stdout:', stdout);
+      console.log('[Stitch Video] ffmpeg stderr:', stderr);
+      console.log('[Stitch Video] ffmpeg finished');
+    } catch (ffErr) {
+      console.error('[Stitch Video] ffmpeg error:', ffErr);
+      console.error('[Stitch Video] ffmpeg stderr:', ffErr.stderr);
+      throw new Error('Failed to stitch videos with ffmpeg: ' + ffErr.message);
     }
 
-    // Upload stitched video to GCS
+    // Verify output file exists and has content
+    const outputStats = await fs.promises.stat(outputPath);
+    if (outputStats.size === 0) {
+      throw new Error('Stitched video file is empty');
+    }
+    console.log('[Stitch Video] Stitched video size:', (outputStats.size / 1024 / 1024).toFixed(2), 'MB');
+
+    // Upload stitched output to GCS
     const stitchedFileName = `interviews/${token}/stitched-${Date.now()}.mp4`;
     const stitchedFile = bucket.file(stitchedFileName);
-    
-    await stitchedFile.save(await fs.promises.readFile(outputPath), {
-      metadata: {
+
+    const outBuffer = await fs.promises.readFile(outputPath);
+    await stitchedFile.save(outBuffer, { 
+      metadata: { 
         contentType: 'video/mp4',
-      }
+        cacheControl: 'public, max-age=31536000'
+      } 
     });
 
+    // Return the GCS storage URL
     const stitchedUrl = `https://storage.googleapis.com/${gcsBucketName}/${stitchedFileName}`;
-    console.log('[Stitch Video] Uploaded stitched video:', stitchedUrl);
 
-    // Clean up temp files
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-    
+    // Clean up temp dir
+    try {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    } catch (cleanupErr) {
+      console.warn('[Stitch Video] cleanup failed', cleanupErr);
+    }
+
     const totalTime = Date.now() - startTime;
-    console.log(`[Stitch Video] Total time: ${totalTime}ms`);
+    console.log(`[Stitch Video] Completed in ${totalTime}ms`, { stitched: stitchedFileName });
 
-    res.json({
+    return res.json({
       message: 'Video stitched successfully',
       stitched_url: stitchedUrl
     });
-
   } catch (error) {
     console.error('[Stitch Video] Error:', error);
-    
-    // Clean up on error
+    // Try clean up on error
     try {
       if (fs.existsSync(tempDir)) {
         await fs.promises.rm(tempDir, { recursive: true, force: true });
       }
-    } catch (cleanupError) {
-      console.error('[Stitch Video] Cleanup error:', cleanupError);
+    } catch (cleanupErr) {
+      console.warn('[Stitch Video] cleanup error:', cleanupErr);
     }
-    
-    res.status(500).json({ 
-      message: error.message || 'Failed to stitch videos' 
-    });
+    return res.status(500).json({ message: error.message || 'Failed to stitch videos' });
   }
 });
 
