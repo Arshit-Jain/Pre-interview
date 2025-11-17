@@ -246,3 +246,46 @@ export async function getVideoAnswersForStitching(interview_token) {
   return result;
 }
 
+// Add this function to store stitched video URL
+export async function saveStitchedVideoUrl(interview_token, stitched_url) {
+  if (!interview_token || !stitched_url) {
+    throw new Error('interview_token and stitched_url are required');
+  }
+
+  try {
+    // Store in interview_links table
+    const result = await sql`
+      UPDATE interview_links
+      SET stitched_video_url = ${stitched_url},
+          stitched_at = CURRENT_TIMESTAMP
+      WHERE unique_token = ${interview_token}
+      RETURNING unique_token, stitched_video_url, stitched_at
+    `;
+
+    return result[0];
+  } catch (error) {
+    console.error('[saveStitchedVideoUrl] Error:', error);
+    throw error;
+  }
+}
+
+// Add this function to get stitched video URL
+export async function getStitchedVideoUrl(interview_token) {
+  if (!interview_token) {
+    throw new Error('interview_token is required');
+  }
+
+  try {
+    const result = await sql`
+      SELECT stitched_video_url, stitched_at
+      FROM interview_links
+      WHERE unique_token = ${interview_token}
+      LIMIT 1
+    `;
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('[getStitchedVideoUrl] Error:', error);
+    throw error;
+  }
+}

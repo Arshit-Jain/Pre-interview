@@ -1,3 +1,5 @@
+// frontend/src/pages/AllResponses.jsx - Updated version with auto-stitching
+
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -16,14 +18,11 @@ const AllResponses = () => {
     const [loadingAnswers, setLoadingAnswers] = useState(false);
     const [videoBlobUrls, setVideoBlobUrls] = useState({});
     
-    // --- CHANGED ---
-    // Renamed `stitchedVideoUrl` and added states for blob URL and loading
-    const [stitchedVideoGcsUrl, setStitchedVideoGcsUrl] = useState(null); // The private GCS URL
-    const [stitchedVideoBlobUrl, setStitchedVideoBlobUrl] = useState(null); // The local blob URL for the <video> tag
-    const [loadingStitchedVideo, setLoadingStitchedVideo] = useState(false); // New loading state for the blob
-    // --- END CHANGED ---
-
+    const [stitchedVideoGcsUrl, setStitchedVideoGcsUrl] = useState(null);
+    const [stitchedVideoBlobUrl, setStitchedVideoBlobUrl] = useState(null);
+    const [loadingStitchedVideo, setLoadingStitchedVideo] = useState(false);
     const [stitching, setStitching] = useState(false);
+    const [fromCache, setFromCache] = useState(false);
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
 
@@ -37,14 +36,20 @@ const AllResponses = () => {
             setLoading(false);
             fetchVideoAnswers(token);
         }
-    }, []); // Keep token out of initial mount dependency array
+    }, []);
 
     useEffect(() => {
         if (token) {
             console.log('[AllResponses] Token detected, fetching video answers:', token);
             fetchVideoAnswers(token);
         }
-    }, [token]); // This effect re-runs when token (from URL) changes
+        
+        // Cleanup function to prevent memory leaks
+        return () => {
+            // Cancel any ongoing operations if component unmounts
+            console.log('[AllResponses] Cleaning up on token change');
+        };
+    }, [token]);
 
     useEffect(() => {
         if (videoAnswers.length > 0) {
@@ -98,9 +103,6 @@ const AllResponses = () => {
         }
     }, [selectedRoleId]);
     
-    // --- NEW EFFECT ---
-    // This effect runs when the private `stitchedVideoGcsUrl` is set.
-    // It fetches the video via the proxy and creates a blob URL.
     useEffect(() => {
         if (!stitchedVideoGcsUrl) {
             return;
@@ -143,7 +145,6 @@ const AllResponses = () => {
 
         fetchStitchedVideoBlob();
 
-        // Cleanup for the blob URL
         return () => {
             setStitchedVideoBlobUrl(prevUrl => {
                 if (prevUrl) {
@@ -153,7 +154,6 @@ const AllResponses = () => {
             });
         };
     }, [stitchedVideoGcsUrl, backendUrl]);
-    // --- END NEW EFFECT ---
 
     const fetchRoles = async () => {
         try {
@@ -220,12 +220,9 @@ const AllResponses = () => {
         setLoadingAnswers(true);
         setLoading(false);
         
-        // --- CHANGED ---
-        // Clear out old stitched video URLs when fetching new answers
         setStitchedVideoGcsUrl(null);
         setStitchedVideoBlobUrl(null);
-        // --- END CHANGED ---
-
+        setFromCache(false);
         setError('');
 
         try {
@@ -242,40 +239,54 @@ const AllResponses = () => {
             
             const answers = response.data.video_answers || [];
             const interviewData = response.data.interview;
+            const existingStitchedUrl = response.data.stitched_video_url;
             
-            // This filter seems redundant if the API is correct, but safe to keep
             const filteredAnswers = answers.filter(a => a.interview_link_token === interviewToken);
             
             setVideoAnswers(filteredAnswers);
             setSelectedResponse(interviewData);
-        } catch (err)
-        {
+            setLoadingAnswers(false); // Set loading false here
+            
+            // If stitched video exists, load it automatically
+            if (existingStitchedUrl) {
+                console.log('[AllResponses] Existing stitched video found:', existingStitchedUrl);
+                setStitchedVideoGcsUrl(existingStitchedUrl);
+                setFromCache(true);
+            } else if (filteredAnswers.length > 0) {
+                // If no stitched video exists but we have answers, create one automatically
+                // But do it AFTER setting state to prevent race conditions
+                console.log('[AllResponses] No stitched video found, will create automatically...');
+                // Use setTimeout to ensure state is updated first
+                setTimeout(() => {
+                    handleStitchVideos(interviewToken);
+                }, 100);
+            }
+        } catch (err) {
             console.error('[AllResponses] Failed to fetch video answers:', err);
             if (err.response) {
                 setError(err.response.data.message || 'Failed to load video answers');
             } else {
                 setError('Failed to load video answers');
             }
-        } finally {
             setLoadingAnswers(false);
         }
     };
 
-    const handleStitchVideos = async () => {
+    const handleStitchVideos = async (interviewToken = token) => {
+        // Prevent multiple simultaneous stitching attempts
+        if (stitching) {
+            console.log('[AllResponses] Already stitching, ignoring duplicate request');
+            return;
+        }
+
         console.log('[AllResponses] Starting video stitching...');
         setStitching(true);
         setError('');
         
-        // --- CHANGED ---
-        // Clear old URLs before starting
-        setStitchedVideoGcsUrl(null);
-        setStitchedVideoBlobUrl(null);
-        // --- END CHANGED ---
-
         try {
             const authToken = localStorage.getItem('token');
             const response = await axios.post(
-                `${backendUrl}/api/interviews/stitch-video/${token}`,
+                `${backendUrl}/api/interviews/stitch-video/${interviewToken}`,
                 {},
                 {
                     headers: {
@@ -284,18 +295,30 @@ const AllResponses = () => {
                 }
             );
 
-            console.log('[AllResponses] Stitched video GCS URL:', response.data.stitched_url);
+            console.log('[AllResponses] Stitched video response:', response.data);
             
-            // --- CHANGED ---
-            // Set the *private* GCS URL. The new useEffect will handle fetching it.
+            if (response.data.from_cache) {
+                console.log('[AllResponses] Using cached stitched video');
+            } else {
+                console.log('[AllResponses] New stitched video created');
+            }
+            
             setStitchedVideoGcsUrl(response.data.stitched_url);
-            // --- END CHANGED ---
+            setFromCache(response.data.from_cache || false);
 
         } catch (err) {
             console.error('[AllResponses] Failed to stitch videos:', err);
-            setError(err.response?.data?.message || 'Failed to stitch videos together');
+            
+            // Check if error is because video already exists
+            if (err.response?.data?.stitched_url) {
+                console.log('[AllResponses] Video already exists, using cached version');
+                setStitchedVideoGcsUrl(err.response.data.stitched_url);
+                setFromCache(true);
+            } else {
+                setError(err.response?.data?.message || 'Failed to stitch videos together');
+            }
         } finally {
-            setStitching(false); // We're done *stitching*, now loading will begin
+            setStitching(false);
         }
     };
 
@@ -396,10 +419,8 @@ const AllResponses = () => {
                         onClick={() => {
                             setSelectedResponse(null);
                             setVideoAnswers([]);
-                            // --- CHANGED ---
                             setStitchedVideoGcsUrl(null);
                             setStitchedVideoBlobUrl(null);
-                            // --- END CHANGED ---
                             navigate('/responses');
                         }}
                     >
@@ -415,7 +436,7 @@ const AllResponses = () => {
 
                     {loadingAnswers ? (
                         <div className="loading-message">Loading video answers...</div>
-                    ) : error && videoAnswers.length === 0 ? ( // Only show main error if no answers
+                    ) : error && videoAnswers.length === 0 ? (
                         <div className="error-message">{error}</div>
                     ) : videoAnswers.length > 0 ? (
                         <div className="video-answers-section">
@@ -425,14 +446,14 @@ const AllResponses = () => {
                                     .filter(a => a.interview_link_token === (token || selectedResponse?.token))
                                     .sort((a, b) => a.question_order - b.question_order)
                                     .map((answer) => (
-                                        <div key={answer.id} className="answer-item"> {/* Simplified key */}
+                                        <div key={answer.id} className="answer-item">
                                             <h4>Question {answer.question_order}: {answer.question_text}</h4>
                                             {answer.video_url ? (
                                                 videoBlobUrls[answer.id] === null ? (
                                                     <div className="no-video">Error loading video</div>
                                                 ) : videoBlobUrls[answer.id] ? (
                                                     <video 
-                                                        key={`video-${answer.id}`} // Simplified key
+                                                        key={`video-${answer.id}`}
                                                         src={videoBlobUrls[answer.id]}
                                                         controls
                                                         className="answer-video"
@@ -454,11 +475,10 @@ const AllResponses = () => {
                             <div className="stitched-video-section">
                                 <h3>Complete Interview (Single Video)</h3>
                                 
-                                { /* --- ENTIRE BLOCK CHANGED --- */ }
                                 {stitching ? (
                                     <div className="loading-message">
                                         <div className="spinner"></div>
-                                        <p>Stitching videos together... This may take a few minutes.</p>
+                                        <p>Creating combined video... This may take a few minutes.</p>
                                     </div>
                                 ) : loadingStitchedVideo ? (
                                     <div className="loading-message">
@@ -466,25 +486,25 @@ const AllResponses = () => {
                                         <p>Loading combined video...</p>
                                     </div>
                                 ) : stitchedVideoBlobUrl ? (
-                                    <video 
-                                        src={stitchedVideoBlobUrl}
-                                        controls
-                                        className="stitched-video"
-                                        preload="metadata"
-                                    />
+                                    <div>
+                                        {fromCache && (
+                                            <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                                                ✓ Previously created video loaded
+                                            </p>
+                                        )}
+                                        <video 
+                                            src={stitchedVideoBlobUrl}
+                                            controls
+                                            className="stitched-video"
+                                            preload="metadata"
+                                        />
+                                    </div>
                                 ) : (
                                     <div className="stitch-prompt">
-                                        <p>Click the button below to create a single combined video of all answers.</p>
-                                        <button 
-                                            className="stitch-button"
-                                            onClick={handleStitchVideos}
-                                            disabled={stitching || loadingStitchedVideo}
-                                        >
-                                            Create Combined Video
-                                        </button>
+                                        <p>No combined video found. Creating one now...</p>
+                                        <div className="spinner"></div>
                                     </div>
                                 )}
-                                { /* --- END CHANGED BLOCK --- */ }
                             </div>
                         </div>
                     ) : (
@@ -532,7 +552,7 @@ const AllResponses = () => {
 const formatTime = (seconds) => {
     if (!seconds) return '0:00';
     const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60); // Use Math.floor to handle potential decimals
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 

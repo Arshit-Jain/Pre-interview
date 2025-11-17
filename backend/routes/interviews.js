@@ -10,7 +10,7 @@ import { uploadVideoToGCS, generateVideoFileName, extractFileNameFromUrl, storag
 import dotenv from 'dotenv';
 import { getRoleById } from '../models/roleModel.js';
 import { findInterviewerByEmail } from '../models/interviewerModel.js';
-
+import { getStitchedVideoUrl, saveStitchedVideoUrl } from '../models/videoAnswerModel.js';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
@@ -602,8 +602,6 @@ router.get('/responses/:token', authenticateToken, async (req, res) => {
 
     console.log('[API /responses/:token] Fetching interviewer by email...');
     const interviewerStartTime = Date.now();
-    // Get interviewer by email
-    // const { findInterviewerByEmail } = await import('../models/interviewerModel.js'); // Already imported at top
     const interviewer = await findInterviewerByEmail(userEmail);
     console.log(`[API /responses/:token] Interviewer lookup completed in ${Date.now() - interviewerStartTime}ms`, {
       interviewerFound: !!interviewer,
@@ -619,8 +617,6 @@ router.get('/responses/:token', authenticateToken, async (req, res) => {
 
     console.log('[API /responses/:token] Fetching interview link by token...');
     const linkStartTime = Date.now();
-    // Verify the interview belongs to this interviewer
-    // const { getInterviewLinkByToken } = await import('../models/interviewLinkModel.js'); // Already imported at top
     const link = await getInterviewLinkByToken(token);
     console.log(`[API /responses/:token] Link lookup completed in ${Date.now() - linkStartTime}ms`, {
       linkFound: !!link,
@@ -636,8 +632,6 @@ router.get('/responses/:token', authenticateToken, async (req, res) => {
 
     console.log('[API /responses/:token] Fetching role and verifying permissions...');
     const roleStartTime = Date.now();
-    // Get role and verify interviewer owns it
-    // const { getRoleById } = await import('../models/roleModel.js'); // Already imported at top
     const role = await getRoleById(link.role_id);
     console.log(`[API /responses/:token] Role lookup completed in ${Date.now() - roleStartTime}ms`, {
       roleFound: !!role,
@@ -660,6 +654,10 @@ router.get('/responses/:token', authenticateToken, async (req, res) => {
       answerCount: videoAnswers.length
     });
 
+    // Check if stitched video already exists
+    console.log('[API /responses/:token] Checking for existing stitched video...');
+    const stitchedInfo = await getStitchedVideoUrl(token);
+    
     const totalTime = Date.now() - startTime;
     console.log(`[API /responses/:token] Total request time: ${totalTime}ms`);
 
@@ -671,7 +669,9 @@ router.get('/responses/:token', authenticateToken, async (req, res) => {
         role_title: role.title,
         role_id: role.id
       },
-      video_answers: videoAnswers
+      video_answers: videoAnswers,
+      stitched_video_url: stitchedInfo?.stitched_video_url || null,
+      stitched_at: stitchedInfo?.stitched_at || null
     });
   } catch (error) {
     console.error('[API /responses/:token] Error:', error);
@@ -871,16 +871,17 @@ router.post('/stitch-video/:token', authenticateToken, async (req, res) => {
   const startTime = Date.now();
   console.log('[Stitch Video] Request received', { token: req.params.token });
 
-  const tempDir = path.join(os.tmpdir(), `interview-${Date.now()}`);
-
   try {
     const { token } = req.params;
+
+    // ───────────────────────────
+    // Validate Auth
+    // ───────────────────────────
     const userEmail = req.user?.email;
     if (!userEmail) {
       return res.status(400).json({ message: 'User email not found in token' });
     }
 
-    // Permission checks
     const interviewer = await findInterviewerByEmail(userEmail);
     if (!interviewer) return res.status(404).json({ message: 'Interviewer not found' });
 
@@ -892,66 +893,104 @@ router.post('/stitch-video/:token', authenticateToken, async (req, res) => {
       return res.status(403).json({ message: 'Permission denied' });
     }
 
-    // Get answers to stitch
+    // ───────────────────────────
+    // Check if Stitched Version Already Exists
+    // ───────────────────────────
+    console.log('[Stitch Video] Checking for existing stitched video...');
+    const existingStitched = await getStitchedVideoUrl(token);
+
+    if (existingStitched?.stitched_video_url) {
+      console.log('[Stitch Video] Found cached stitched video:', existingStitched.stitched_video_url);
+
+      try {
+        const fileName = extractFileNameFromUrl(existingStitched.stitched_video_url);
+
+        if (fileName) {
+          const bucket = storage.bucket(gcsBucketName);
+          const file = bucket.file(fileName);
+          const [exists] = await file.exists();
+
+          if (exists) {
+            console.log('[Stitch Video] Verified cached stitched video exists in GCS');
+            return res.json({
+              message: 'Stitched video already exists',
+              stitched_url: existingStitched.stitched_video_url,
+              stitched_at: existingStitched.stitched_at,
+              from_cache: true
+            });
+          } else {
+            console.warn('[Stitch Video] Cached URL exists but file missing in GCS — recreating...');
+
+            await sql`
+              UPDATE interview_links
+              SET stitched_video_url = NULL, stitched_at = NULL
+              WHERE unique_token = ${token}
+            `;
+          }
+        }
+      } catch (verifyErr) {
+        console.error('[Stitch Video] Error verifying cached GCS file:', verifyErr);
+      }
+    }
+
+    // ───────────────────────────
+    // Prepare Working Directory
+    // ───────────────────────────
+    const tempDir = path.join(os.tmpdir(), `interview-${Date.now()}`);
+
+    // ───────────────────────────
+    // Load Video Answers
+    // ───────────────────────────
     const videoAnswers = await getVideoAnswersForStitching(token);
     if (!videoAnswers || videoAnswers.length === 0) {
       return res.status(404).json({ message: 'No video answers found to stitch' });
     }
 
-    // Sort by question order
     const sortedAnswers = videoAnswers.sort((a, b) => a.question_order - b.question_order);
-    console.log('[Stitch Video] Found videos to stitch:', sortedAnswers.map(a => ({
+
+    console.log('[Stitch Video] Videos to stitch:', sortedAnswers.map(a => ({
       order: a.question_order,
       question: a.question_text,
       url: a.video_url
     })));
 
-    // Create temp dir
     await fs.promises.mkdir(tempDir, { recursive: true });
 
     const bucket = storage.bucket(gcsBucketName);
     const localFiles = [];
     const transcodePromises = [];
 
-    // Download and transcode each video to ensure compatibility
+    // ───────────────────────────
+    // Download & Transcode Each Video
+    // ───────────────────────────
     for (let i = 0; i < sortedAnswers.length; i++) {
       const answer = sortedAnswers[i];
       const fileName = extractFileNameFromUrl(answer.video_url);
-      
+
       if (!fileName) {
-        console.error('[Stitch Video] Invalid video URL:', answer.video_url);
         throw new Error(`Invalid video URL for answer id ${answer.id}`);
       }
-      
-      const file = bucket.file(fileName);
 
-      // Check if file exists
+      const file = bucket.file(fileName);
       const [exists] = await file.exists();
       if (!exists) {
-        console.error('[Stitch Video] File does not exist:', fileName);
-        throw new Error(`Source video missing: ${fileName}`);
+        throw new Error(`Source video missing in GCS: ${fileName}`);
       }
 
-      // Download to temp location
       const downloadPath = path.join(tempDir, `download_${i}.mp4`);
       await file.download({ destination: downloadPath });
-      
-      // Verify downloaded file
+
       const stats = await fs.promises.stat(downloadPath);
-      if (stats.size === 0) {
-        throw new Error(`Downloaded file is empty: ${downloadPath}`);
-      }
-      
+      if (stats.size === 0) throw new Error(`Downloaded file is empty: ${downloadPath}`);
+
       console.log('[Stitch Video] Downloaded', downloadPath, `(${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
 
-      // Transcode each video to ensure uniform format
-      // This is key - we re-encode each video to the same spec
       const transcodedPath = path.join(tempDir, `video_${i}.mp4`);
-      
+
       transcodePromises.push(
         execAsync(
           `ffmpeg -y -i "${downloadPath}" -c:v libx264 -preset medium -crf 23 -r 30 -s 1280x720 -c:a aac -ar 44100 -ac 2 -b:a 128k "${transcodedPath}"`,
-          { maxBuffer: 1024 * 1024 * 50 }
+          { maxBuffer: 50 * 1024 * 1024 }
         ).then(() => {
           console.log('[Stitch Video] Transcoded video', i);
           localFiles.push(transcodedPath);
@@ -959,92 +998,92 @@ router.post('/stitch-video/:token', authenticateToken, async (req, res) => {
       );
     }
 
-    // Wait for all transcoding to complete
     await Promise.all(transcodePromises);
-    
-    // Verify all files were transcoded successfully
+
     if (localFiles.length !== sortedAnswers.length) {
       throw new Error(`Expected ${sortedAnswers.length} videos but only transcoded ${localFiles.length}`);
     }
 
-    // Sort localFiles to ensure correct order
     localFiles.sort();
+    console.log('[Stitch Video] All videos transcoded');
 
-    console.log('[Stitch Video] All videos transcoded successfully');
-
-    // Build concat list
+    // ───────────────────────────
+    // Build Concat List
+    // ───────────────────────────
     const concatListPath = path.join(tempDir, 'concat.txt');
     const concatContent = localFiles.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
     await fs.promises.writeFile(concatListPath, concatContent);
-    
-    console.log('[Stitch Video] Concat list:', concatContent);
 
-    // Output path
+    console.log('[Stitch Video] Concat list prepared');
+
     const outputPath = path.join(tempDir, 'stitched.mp4');
 
-    // Run ffmpeg concat - since all inputs are now uniform, concat demuxer should work
     const ffmpegCmd = `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${outputPath}"`;
-    console.log('[Stitch Video] Running ffmpeg:', ffmpegCmd);
-    
+    console.log('[Stitch Video] Running ffmpeg concat');
+
     try {
-      const { stdout, stderr } = await execAsync(ffmpegCmd, { maxBuffer: 1024 * 1024 * 50 });
+      const { stdout, stderr } = await execAsync(ffmpegCmd, { maxBuffer: 50 * 1024 * 1024 });
       console.log('[Stitch Video] ffmpeg stdout:', stdout);
       console.log('[Stitch Video] ffmpeg stderr:', stderr);
-      console.log('[Stitch Video] ffmpeg finished');
     } catch (ffErr) {
-      console.error('[Stitch Video] ffmpeg error:', ffErr);
-      console.error('[Stitch Video] ffmpeg stderr:', ffErr.stderr);
+      console.error('[Stitch Video] ffmpeg error:', ffErr.stderr);
       throw new Error('Failed to stitch videos with ffmpeg: ' + ffErr.message);
     }
 
-    // Verify output file exists and has content
     const outputStats = await fs.promises.stat(outputPath);
-    if (outputStats.size === 0) {
-      throw new Error('Stitched video file is empty');
-    }
-    console.log('[Stitch Video] Stitched video size:', (outputStats.size / 1024 / 1024).toFixed(2), 'MB');
+    if (outputStats.size === 0) throw new Error('Stitched output is empty');
 
-    // Upload stitched output to GCS
+    console.log('[Stitch Video] Output size:', (outputStats.size / 1024 / 1024).toFixed(2), 'MB');
+
+    // ───────────────────────────
+    // Upload to GCS
+    // ───────────────────────────
     const stitchedFileName = `interviews/${token}/stitched-${Date.now()}.mp4`;
     const stitchedFile = bucket.file(stitchedFileName);
 
-    const outBuffer = await fs.promises.readFile(outputPath);
-    await stitchedFile.save(outBuffer, { 
-      metadata: { 
+    await stitchedFile.save(await fs.promises.readFile(outputPath), {
+      metadata: {
         contentType: 'video/mp4',
         cacheControl: 'public, max-age=31536000'
-      } 
+      }
     });
 
-    // Return the GCS storage URL
     const stitchedUrl = `https://storage.googleapis.com/${gcsBucketName}/${stitchedFileName}`;
+    await saveStitchedVideoUrl(token, stitchedUrl);
 
-    // Clean up temp dir
+    console.log('[Stitch Video] Saved URL to database');
+
+    // ───────────────────────────
+    // Cleanup
+    // ───────────────────────────
     try {
       await fs.promises.rm(tempDir, { recursive: true, force: true });
     } catch (cleanupErr) {
       console.warn('[Stitch Video] cleanup failed', cleanupErr);
     }
 
-    const totalTime = Date.now() - startTime;
-    console.log(`[Stitch Video] Completed in ${totalTime}ms`, { stitched: stitchedFileName });
+    console.log(`[Stitch Video] Completed in ${Date.now() - startTime}ms`);
 
     return res.json({
       message: 'Video stitched successfully',
-      stitched_url: stitchedUrl
+      stitched_url: stitchedUrl,
+      from_cache: false
     });
+
   } catch (error) {
-    console.error('[Stitch Video] Error:', error);
-    // Try clean up on error
+    console.error('[Stitch Video] Error occurred:', error);
+
     try {
-      if (fs.existsSync(tempDir)) {
+      if (tempDir && fs.existsSync(tempDir)) {
         await fs.promises.rm(tempDir, { recursive: true, force: true });
       }
     } catch (cleanupErr) {
       console.warn('[Stitch Video] cleanup error:', cleanupErr);
     }
+
     return res.status(500).json({ message: error.message || 'Failed to stitch videos' });
   }
 });
+
 
 export default router;
