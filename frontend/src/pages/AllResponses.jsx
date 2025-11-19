@@ -465,9 +465,9 @@ const AllResponses = () => {
                                             ) : (
                                                 <div className="no-video">Video URL not available</div>
                                             )}
-                                            <p className="answer-meta">
+                                            {/* <p className="answer-meta">
                                                 Duration: {answer.recording_duration ? formatTime(answer.recording_duration) : 'N/A'}
-                                            </p>
+                                            </p> */}
                                         </div>
                                     ))}
                             </div>

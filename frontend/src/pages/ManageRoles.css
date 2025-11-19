@@ -1,0 +1,161 @@
+.manage-roles-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    padding: 2rem;
+    color: #fff;
+    box-sizing: border-box;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-content h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.header-content p {
+    margin: 0.5rem 0 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.nav-btn, .logout-btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.nav-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+.logout-btn {
+    background: rgba(255, 60, 60, 0.15);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 60, 60, 0.3);
+}
+
+.logout-btn:hover {
+    background: rgba(255, 60, 60, 0.25);
+    transform: translateY(-1px);
+}
+
+/* === Layout Grid (Laptop/Desktop) === */
+.roles-layout {
+    display: grid;
+    /* Fixed width for form, remaining space for list */
+    grid-template-columns: 400px 1fr; 
+    gap: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+    align-items: start;
+}
+
+.creation-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    position: sticky;
+    top: 2rem; /* Keeps form visible while scrolling list on large screens */
+}
+
+.invite-section {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Tablet Optimization (iPad / Surface) === */
+@media (max-width: 1024px) {
+    .manage-roles-page {
+        padding: 1.5rem;
+    }
+
+    .roles-layout {
+        grid-template-columns: 1fr; /* Stack vertically */
+        gap: 2rem;
+    }
+
+    .creation-section {
+        position: static; /* Remove sticky on tablet so it doesn't block view */
+        max-width: 100%;
+    }
+
+    /* If invite is active, ensure it stands out */
+    .invite-section {
+        scroll-margin-top: 2rem;
+    }
+}
+
+/* === Mobile Optimization === */
+@media (max-width: 768px) {
+    .manage-roles-page {
+        padding: 1rem;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .header-content h1 {
+        font-size: 1.75rem;
+    }
+    
+    .header-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* Buttons side-by-side */
+    }
+    
+    .nav-btn, .logout-btn {
+        width: 100%;
+        text-align: center;
+        padding: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .roles-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    /* Make the form section visually distinct on mobile */
+    .creation-section {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding-bottom: 2rem;
+        gap: 1.5rem;
+    }
+}

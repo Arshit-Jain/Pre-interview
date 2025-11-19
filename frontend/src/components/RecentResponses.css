@@ -1,139 +1,307 @@
-.recent-responses-container {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+/* Overlay - centers the modal */
+.question-manager-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
 }
 
-.responses-header {
+/* Modal container */
+.question-manager-modal {
+    background: #1a1a1a;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* Header */
+.question-manager-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.responses-header h2 {
+.question-manager-header h2 {
     margin: 0;
     color: #fff;
     font-size: 1.5rem;
 }
 
-.view-all-button {
-    padding: 0.5rem 1.5rem;
-    background: rgba(100, 108, 255, 0.2);
-    color: #646cff;
-    border: 1px solid rgba(100, 108, 255, 0.3);
-    border-radius: 8px;
+.close-button {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 2rem;
     cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: all 0.3s ease;
-}
-
-.view-all-button:hover {
-    background: rgba(100, 108, 255, 0.3);
-    border-color: rgba(100, 108, 255, 0.5);
-    transform: translateY(-2px);
-}
-
-.responses-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
-}
-
-.response-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.response-card:hover {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(100, 108, 255, 0.5);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.response-header {
+    padding: 0;
+    width: 32px;
+    height: 32px;
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
 }
 
-.response-header h3 {
-    margin: 0;
+.close-button:hover {
     color: #fff;
-    font-size: 1.1rem;
+}
+
+/* Content area */
+.questions-container {
+    padding: 1.5rem;
+    overflow-y: auto;
     flex: 1;
 }
 
-.role-badge {
-    background: rgba(100, 108, 255, 0.2);
-    color: #646cff;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    white-space: nowrap;
-    margin-left: 0.5rem;
+/* Error message */
+.error-message {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
 }
 
-.response-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.response-email {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
-}
-
-.response-meta {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.separator {
-    color: rgba(255, 255, 255, 0.3);
-}
-
-.loading-message,
-.no-responses {
+/* Loading state */
+.loading {
     text-align: center;
     padding: 2rem;
     color: rgba(255, 255, 255, 0.7);
 }
 
-.error-message {
-    padding: 1rem;
-    background: rgba(255, 0, 0, 0.2);
-    border: 1px solid rgba(255, 0, 0, 0.5);
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Questions list */
+.questions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Question item */
+.question-item {
+    display: flex;
+    gap: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    color: #ff6b6b;
+    padding: 1rem;
+    transition: all 0.2s;
+}
+
+.question-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.question-item.dragging {
+    opacity: 0.5;
+}
+
+/* Drag handle */
+.drag-handle {
+    color: rgba(255, 255, 255, 0.4);
+    cursor: grab;
+    font-size: 1.2rem;
+    user-select: none;
+    padding-top: 0.25rem;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* Question content */
+.question-content {
+    flex: 1;
+    min-width: 0;
+}
+
+/* View mode */
+.view-mode {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.question-number {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 600;
+    min-width: 25px;
+}
+
+.question-text {
+    flex: 1;
+    color: #fff;
+    min-width: 0;
+}
+
+.question-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.edit-btn,
+.delete-btn {
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.edit-btn {
+    background: rgba(100, 108, 255, 0.2);
+    color: #646cff;
+}
+
+.edit-btn:hover {
+    background: rgba(100, 108, 255, 0.3);
+}
+
+.delete-btn {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.delete-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
+.delete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Edit mode */
+.edit-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.edit-mode textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.3);
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.95rem;
+    resize: vertical;
+}
+
+.edit-mode textarea:focus {
+    outline: none;
+    border-color: #646cff;
+}
+
+.edit-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.save-btn,
+.cancel-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.save-btn {
+    background: #646cff;
+    color: #fff;
+}
+
+.save-btn:hover {
+    background: #535bf2;
+}
+
+.cancel-btn {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Add question section */
+.add-question-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 1.5rem;
     text-align: center;
 }
 
-@media (max-width: 768px) {
-    .responses-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .responses-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
-    }
+.add-question-btn {
+    background: rgba(100, 108, 255, 0.2);
+    color: #646cff;
+    border: 1px solid rgba(100, 108, 255, 0.3);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: all 0.2s;
 }
 
+.add-question-btn:hover {
+    background: rgba(100, 108, 255, 0.3);
+}
+
+.max-questions {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+}
+
+.question-count {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0;
+}
+
+/* Scrollbar styling */
+.questions-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.questions-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.questions-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.questions-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}

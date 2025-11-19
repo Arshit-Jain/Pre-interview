@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
+import ManageRoles from './pages/ManageRoles.jsx';
 import Interview from './pages/Interview.jsx';
 import AllResponses from './pages/AllResponses.jsx';
 import './App.css';
@@ -17,11 +18,21 @@ function App() {
             <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/interview/:token" element={<Interview />} />
+                
+                {/* Protected Interviewer Routes */}
                 <Route 
                     path="/dashboard" 
                     element={
                         <ProtectedRoute>
                             <Dashboard />
+                        </ProtectedRoute>
+                    } 
+                />
+                <Route 
+                    path="/roles" 
+                    element={
+                        <ProtectedRoute>
+                            <ManageRoles />
                         </ProtectedRoute>
                     } 
                 />
@@ -41,7 +52,8 @@ function App() {
                         </ProtectedRoute>
                     } 
                 />
-                <Route path="/dashboard" element={<Navigate to="/dashboard" replace />} />
+                
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
         </BrowserRouter>

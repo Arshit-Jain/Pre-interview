@@ -1,84 +1,69 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import './login.css';
+import './Signup.css';
 
-const LoginPage = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+const SignupPage = () => {
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+    });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-    const location = useLocation();
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
 
-    useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            const from = location.state?.from?.pathname || '/dashboard';
-            navigate(from, { replace: true });
-        }
-    }, [navigate, location]);
-
-    useEffect(() => {
-        if (!location.search) return;
-
-        const params = new URLSearchParams(location.search);
-        const tokenParam = params.get('token');
-        const errorParam = params.get('error');
-
-        if (errorParam) {
-            setError(errorParam.replace(/_/g, ' '));
-        }
-
-        if (tokenParam) {
-            const redirectParam = params.get('redirect');
-            const encodedUser = params.get('user');
-            let userFromOAuth = null;
-
-            if (encodedUser) {
-                try {
-                    userFromOAuth = JSON.parse(window.atob(encodedUser));
-                } catch (decodeError) {
-                    console.error('Failed to decode OAuth user payload', decodeError);
-                }
-            }
-
-            localStorage.setItem('token', tokenParam);
-            if (userFromOAuth) {
-                localStorage.setItem('user', JSON.stringify(userFromOAuth));
-            }
-
-            const redirectTo = (redirectParam && redirectParam.startsWith('/')) ? redirectParam : '/dashboard';
-            navigate(redirectTo, { replace: true });
-        }
-    }, [location, navigate]);
+    const handleChange = (e) => {
+        setFormData({
+            ...formData,
+            [e.target.id]: e.target.value
+        });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (formData.password !== formData.confirmPassword) {
+            setError('Passwords do not match');
+            return;
+        }
+
+        if (formData.password.length < 6) {
+            setError('Password must be at least 6 characters long');
+            return;
+        }
+
         setLoading(true);
 
         try {
             const response = await axios.post(
-                `${backendUrl}/api/auth/login`,
-                { email, password },
+                `${backendUrl}/api/auth/register`,
+                {
+                    name: formData.name,
+                    email: formData.email,
+                    password: formData.password
+                },
                 { headers: { 'Content-Type': 'application/json' } }
             );
 
-            const data = response.data;
-
-            if (data.token) {
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('user', JSON.stringify(data.user));
+            // If registration returns a token immediately, log them in
+            if (response.data.token) {
+                localStorage.setItem('token', response.data.token);
+                localStorage.setItem('user', JSON.stringify(response.data.user));
+                navigate('/dashboard');
+            } else {
+                // Otherwise prompt to login
+                navigate('/login', { 
+                    state: { message: 'Account created successfully! Please sign in.' } 
+                });
             }
-
-            const from = location.state?.from?.pathname || '/dashboard';
-            navigate(from, { replace: true });
         } catch (err) {
             if (err.response) {
-                setError(err.response.data.message || 'Login failed');
+                setError(err.response.data.message || 'Registration failed');
             } else if (err.request) {
                 setError('No response from server. Please try again later.');
             } else {
@@ -90,57 +75,75 @@ const LoginPage = () => {
     };
 
     const handleOAuthLogin = (provider) => {
-        const currentPath = location.state?.from?.pathname || '/dashboard';
-        window.location.href = `${backendUrl}/api/auth/oauth/${provider}?redirect=${encodeURIComponent(currentPath)}`;
+        window.location.href = `${backendUrl}/api/auth/oauth/${provider}?redirect=/dashboard`;
     };
 
     return (
         <div className="auth-container">
-            <div className="auth-card">
+            <div className="auth-card signup-card">
                 <div className="auth-header">
-                    <h1>Welcome Back</h1>
-                    <p>Sign in to access your dashboard</p>
+                    <h1>Create Account</h1>
+                    <p>Join us to start hiring better candidates</p>
                 </div>
 
                 {error && <div className="auth-error">{error}</div>}
 
                 <form onSubmit={handleSubmit} className="auth-form">
                     <div className="form-group">
-                        <label htmlFor="email">Email Address</label>
+                        <label htmlFor="name">Full Name</label>
                         <input
-                            type="email"
-                            id="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="name@company.com"
+                            type="text"
+                            id="name"
+                            value={formData.name}
+                            onChange={handleChange}
+                            placeholder="John Doe"
                             required
-                            autoComplete="email"
                         />
                     </div>
 
                     <div className="form-group">
-                        <div className="label-row">
-                            <label htmlFor="password">Password</label>
-                            {/* <Link to="/forgot-password" className="forgot-link">Forgot?</Link> */}
-                        </div>
+                        <label htmlFor="email">Email Address</label>
+                        <input
+                            type="email"
+                            id="email"
+                            value={formData.email}
+                            onChange={handleChange}
+                            placeholder="name@company.com"
+                            required
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="password">Password</label>
                         <input
                             type="password"
                             id="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="••••••••"
+                            value={formData.password}
+                            onChange={handleChange}
+                            placeholder="Create a password"
                             required
-                            autoComplete="current-password"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="confirmPassword">Confirm Password</label>
+                        <input
+                            type="password"
+                            id="confirmPassword"
+                            value={formData.confirmPassword}
+                            onChange={handleChange}
+                            placeholder="Confirm your password"
+                            required
                         />
                     </div>
 
                     <button type="submit" className="primary-btn" disabled={loading}>
-                        {loading ? <span className="spinner"></span> : 'Sign In'}
+                        {loading ? <span className="spinner"></span> : 'Create Account'}
                     </button>
                 </form>
 
                 <div className="auth-divider">
-                    <span>Or continue with</span>
+                    <span>Or join with</span>
                 </div>
 
                 <div className="oauth-actions">
@@ -161,12 +164,12 @@ const LoginPage = () => {
                     </button>
                 </div>
 
-                {/* <div className="auth-footer">
-                    <p>Don't have an account? <Link to="/register">Sign up</Link></p>
-                </div> */}
+                <div className="auth-footer">
+                    <p>Already have an account? <Link to="/login">Sign in</Link></p>
+                </div>
             </div>
         </div>
     );
 };
 
-export default LoginPage;
+export default SignupPage;

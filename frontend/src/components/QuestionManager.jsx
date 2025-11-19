@@ -52,7 +52,8 @@ const QuestionManager = ({ roleId, onClose }) => {
         }
 
         const newOrder = questions.length + 1;
-        const newQuestionText = 'New question';
+        // Backend requires text, so we send a dummy value, but UI will show empty
+        const newQuestionText = 'New Question'; 
 
         try {
             const token = localStorage.getItem('token');
@@ -73,7 +74,7 @@ const QuestionManager = ({ roleId, onClose }) => {
 
             setQuestions(prev => [...prev, response.data.question]);
             setEditingId(response.data.question.id);
-            setEditText(newQuestionText);
+            setEditText(''); // Show empty input to user so they see placeholder
             setError('');
         } catch (err) {
             if (err.response) {
@@ -353,4 +354,3 @@ const QuestionManager = ({ roleId, onClose }) => {
 };
 
 export default QuestionManager;
-
