@@ -4,13 +4,16 @@ import axios from 'axios';
 import RoleForm from '../components/RoleForm';
 import RoleList from '../components/RoleList';
 import InviteCandidate from '../components/InviteCandidate';
+import QuestionManager from '../components/QuestionManager';
 import './ManageRoles.css';
 
 const ManageRoles = () => {
     const navigate = useNavigate();
     const [interviewerId, setInterviewerId] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [selectedRole, setSelectedRole] = useState(null);
+    const [showCreateForm, setShowCreateForm] = useState(false);
+    const [selectedRoleForQuestions, setSelectedRoleForQuestions] = useState(null);
+    const [selectedRoleForInvite, setSelectedRoleForInvite] = useState(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
@@ -41,6 +44,7 @@ const ManageRoles = () => {
 
     const handleRoleAdded = () => {
         setRefreshTrigger(prev => prev + 1);
+        setShowCreateForm(false);
     };
 
     const handleLogout = () => {
@@ -51,53 +55,82 @@ const ManageRoles = () => {
 
     return (
         <div className="manage-roles-page">
+            {/* Header */}
             <div className="page-header">
                 <div className="header-content">
                     <h1>Manage Roles</h1>
-                    <p>Create roles, manage questions, and invite candidates.</p>
+                    <p>Create roles and invite candidates.</p>
                 </div>
                 <div className="header-actions">
-                    <button className="nav-btn" onClick={() => navigate('/dashboard')}>
+                    <button className="header-btn" onClick={() => navigate('/dashboard')}>
                         Dashboard
                     </button>
-                    <button className="logout-btn" onClick={handleLogout}>
+                    <button className="header-btn logout" onClick={handleLogout}>
                         Logout
                     </button>
                 </div>
             </div>
 
+            {/* Main Content */}
             <div className="roles-layout">
-                {loading ? (
-                    <div className="loading-state">Loading...</div>
-                ) : (
-                    <>
-                        <div className="creation-section">
-                            <RoleForm 
-                                interviewerId={interviewerId} 
-                                onRoleAdded={handleRoleAdded} 
-                            />
-                            
-                            {selectedRole && (
-                                <div className="invite-section">
-                                    <InviteCandidate 
-                                        roleId={selectedRole.id}
-                                        roleTitle={selectedRole.title}
-                                    />
-                                </div>
-                            )}
-                        </div>
+                <div className="controls-bar">
+                     <button 
+                        className="create-role-btn"
+                        onClick={() => setShowCreateForm(!showCreateForm)}
+                    >
+                        {showCreateForm ? 'Cancel' : '+ Create New Role'}
+                    </button>
+                </div>
 
-                        <div className="list-section">
-                            <RoleList 
-                                interviewerId={interviewerId}
-                                refreshTrigger={refreshTrigger}
-                                onRoleSelect={setSelectedRole}
-                                preview={false} // Full list mode
-                            />
-                        </div>
-                    </>
+                {showCreateForm && (
+                    <div className="create-form-wrapper">
+                        <RoleForm 
+                            interviewerId={interviewerId} 
+                            onRoleAdded={handleRoleAdded} 
+                        />
+                    </div>
                 )}
+
+                <div className="list-section">
+                    {loading ? (
+                        <div className="loading-state">Loading...</div>
+                    ) : (
+                        <RoleList 
+                            interviewerId={interviewerId}
+                            refreshTrigger={refreshTrigger}
+                            onManageQuestions={setSelectedRoleForQuestions}
+                            onInvite={setSelectedRoleForInvite}
+                            preview={false}
+                        />
+                    )}
+                </div>
             </div>
+
+            {/* Side Drawer for Questions */}
+            {selectedRoleForQuestions && (
+                <div className="side-drawer-overlay" onClick={() => setSelectedRoleForQuestions(null)}>
+                    <div className="side-drawer" onClick={e => e.stopPropagation()}>
+                        <QuestionManager
+                            roleId={selectedRoleForQuestions.id}
+                            roleTitle={selectedRoleForQuestions.title}
+                            onClose={() => setSelectedRoleForQuestions(null)}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Modal for Invite */}
+            {selectedRoleForInvite && (
+                <div className="modal-overlay" onClick={() => setSelectedRoleForInvite(null)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <InviteCandidate 
+                            roleId={selectedRoleForInvite.id}
+                            roleTitle={selectedRoleForInvite.title}
+                            onClose={() => setSelectedRoleForInvite(null)}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

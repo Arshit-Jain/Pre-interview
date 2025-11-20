@@ -1,33 +1,70 @@
-.invite-candidate-container {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 2rem;
-    margin-bottom: 2rem;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.invite-candidate-container h2 {
-    margin: 0 0 0.5rem 0;
+.invite-candidate-modal-inner {
+    padding: 0;
     color: #fff;
-    font-size: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    /* Ensure it fits on mobile screens without scrolling the modal container itself */
+    max-height: 90vh; 
+    width: 100%;
+    box-sizing: border-box;
 }
 
-.role-info {
-    margin: 0 0 1.5rem 0;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
+.invite-header {
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
 }
 
-.role-info strong {
-    color: #646cff;
+.invite-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
     font-weight: 600;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.5rem;
+    margin: -0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn:hover {
+    color: #fff;
+}
+
+.invite-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+    -webkit-overflow-scrolling: touch;
+}
+
+.role-badge {
+    background: rgba(100, 108, 255, 0.15);
+    color: #818cf8;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    display: inline-block;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: 1px solid rgba(100, 108, 255, 0.2);
 }
 
 .invite-form {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.25rem;
 }
 
 .form-group {
@@ -37,122 +74,123 @@
 }
 
 .form-group label {
-    color: #fff;
-    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
     font-size: 0.9rem;
 }
 
 .form-group input {
-    padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 0.875rem;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: #fff;
-    font-size: 1rem;
-    transition: all 0.3s ease;
+    font-size: 1rem; /* Ensures no zoom on focus on iOS */
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .form-group input:focus {
     outline: none;
     border-color: #646cff;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
 }
 
-.form-group input::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+.link-result {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 0.5rem 0;
+    border: 1px solid rgba(81, 207, 102, 0.2);
 }
 
-.form-group input:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+.link-result p {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    color: #51cf66;
+    font-weight: 600;
 }
 
-.form-group small {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.8rem;
+.link-box {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.link-box input {
+    flex: 1;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+    min-width: 0;
+    width: 100%; /* Fallback width */
+}
+
+.link-box button {
+    padding: 0 1.25rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 .submit-button {
-    padding: 0.75rem 1.5rem;
+    margin-top: 0.5rem;
+    padding: 1rem;
     background: #646cff;
-    color: #fff;
+    color: white;
     border: none;
     border-radius: 8px;
+    font-weight: 600;
     font-size: 1rem;
-    font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
-    margin-top: 0.5rem;
+    transition: background 0.2s;
+    width: 100%; /* Ensure full width */
 }
 
 .submit-button:hover:not(:disabled) {
     background: #535bf2;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(100, 108, 255, 0.4);
 }
 
 .submit-button:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-    transform: none;
 }
 
 .error-message {
-    padding: 0.75rem;
-    background: rgba(255, 0, 0, 0.2);
-    border: 1px solid rgba(255, 0, 0, 0.5);
-    border-radius: 8px;
-    color: #ff6b6b;
+    color: #ff8a8a;
     font-size: 0.9rem;
+    background: rgba(255, 60, 60, 0.1);
+    padding: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 60, 60, 0.2);
 }
 
 .success-message {
+    color: #69db7c;
+    font-size: 0.9rem;
+    background: rgba(81, 207, 102, 0.1);
     padding: 0.75rem;
-    background: rgba(0, 255, 0, 0.2);
-    border: 1px solid rgba(0, 255, 0, 0.5);
-    border-radius: 8px;
-    color: #51cf66;
-    font-size: 0.9rem;
+    border-radius: 6px;
+    border: 1px solid rgba(81, 207, 102, 0.2);
 }
 
-.link-info {
-    margin-top: 1rem;
-    padding: 1rem;
-    background: rgba(100, 108, 255, 0.1);
-    border: 1px solid rgba(100, 108, 255, 0.3);
-    border-radius: 8px;
+/* Mobile Tweaks */
+@media (max-width: 480px) {
+    .invite-body {
+        padding: 1.25rem;
+    }
+    
+    .link-box {
+        flex-direction: column;
+    }
+    
+    .link-box button {
+        padding: 0.875rem;
+        width: 100%;
+    }
 }
-
-.link-info h3 {
-    margin: 0 0 1rem 0;
-    color: #646cff;
-    font-size: 1.1rem;
-}
-
-.link-details {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.link-details p {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.9rem;
-    word-break: break-all;
-}
-
-.link-details a {
-    color: #646cff;
-    text-decoration: underline;
-}
-
-.link-details a:hover {
-    color: #535bf2;
-}
-
-.link-details strong {
-    color: #fff;
-    margin-right: 0.5rem;
-}
-

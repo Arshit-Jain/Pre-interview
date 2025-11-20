@@ -1,3 +1,4 @@
+// Refactored layout structure for better responsiveness
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -18,21 +19,18 @@ const Dashboard = () => {
             navigate('/login');
             return;
         }
-
         const fetchInterviewer = async () => {
             try {
-                const response = await axios.get(
-                    `${backendUrl}/api/roles/my-interviewer`,
-                    { headers: { 'Authorization': `Bearer ${token}` } }
-                );
+                const response = await axios.get(`${backendUrl}/api/roles/my-interviewer`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 setInterviewerId(response.data.interviewer.id);
             } catch (err) {
-                console.error('Failed to fetch interviewer data', err);
+                console.error(err);
             } finally {
                 setLoading(false);
             }
         };
-
         fetchInterviewer();
     }, [navigate, backendUrl]);
 
@@ -44,57 +42,47 @@ const Dashboard = () => {
 
     return (
         <div className="dashboard-container">
-            {/* Header Section */}
-            <div className="dashboard-header">
-                <div className="welcome-section">
+            <header className="dashboard-header">
+                <div className="header-text">
                     <h1>Dashboard</h1>
-                    <p>Welcome back, {user.email || 'Recruiter'}!</p>
+                    <p>Welcome back, <span className="user-highlight">{user.email}</span></p>
                 </div>
-                <div className="header-controls">
-                    <button className="logout-btn" onClick={handleLogout}>
-                        Logout
-                    </button>
-                </div>
-            </div>
+                <button className="logout-btn" onClick={handleLogout}>Logout</button>
+            </header>
 
             {loading ? (
-                <div className="dashboard-loading">Loading your dashboard...</div>
+                <div className="loading-spinner">Loading...</div>
             ) : (
-                <div className="dashboard-grid">
-                    {/* Quick Actions Card */}
-                    <div className="action-card-container">
-                        <div className="action-card" onClick={() => navigate('/roles')}>
-                            <div className="action-icon">+</div>
-                            <div className="action-text">
-                                <h3>Add New Role</h3>
-                                <p>Create a new job role and invite candidates.</p>
+                <main className="dashboard-grid">
+                    <section className="quick-actions">
+                        <div className="action-card primary" onClick={() => navigate('/roles')}>
+                            <span className="icon">+</span>
+                            <div>
+                                <h3>New Role</h3>
+                                <p>Create job & invite</p>
                             </div>
-                            <div className="action-arrow">&rarr;</div>
                         </div>
-                        <div className="action-card secondary" onClick={() => navigate('/responses')}>
-                            <div className="action-icon">≡</div>
-                            <div className="action-text">
-                                <h3>View All Responses</h3>
-                                <p>Browse all candidate submissions.</p>
+                        <div className="action-card" onClick={() => navigate('/responses')}>
+                            <span className="icon">≡</span>
+                            <div>
+                                <h3>All Responses</h3>
+                                <p>View submissions</p>
                             </div>
-                            <div className="action-arrow">&rarr;</div>
                         </div>
-                    </div>
+                    </section>
 
-                    {/* Recent Roles Preview */}
-                    <div className="widget-container">
+                    <section className="widget widget-roles">
                         <RoleList 
                             interviewerId={interviewerId} 
                             preview={true}
-                            onRoleSelect={() => navigate('/roles')} // Redirect on click in preview
+                            onRoleSelect={() => navigate('/roles')} 
                         />
-                    </div>
+                    </section>
 
-                    {/* Recent Responses Preview */}
-                    <div className="widget-container">
+                    <section className="widget widget-activity">
                         <RecentResponses limit={4} />
-                    </div>
-                </div>
+                    </section>
+                </main>
             )}
         </div>
     );

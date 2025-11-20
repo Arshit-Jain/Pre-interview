@@ -1,176 +1,98 @@
 .role-list-container {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 2rem;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 1.5rem;
+    height: 100%;
 }
 
-.role-list-container h2 {
-    margin: 0 0 1.5rem 0;
-    color: #fff;
-    font-size: 1.5rem;
-}
-
-.loading {
-    color: rgba(255, 255, 255, 0.7);
-    text-align: center;
-    padding: 2rem;
-    font-size: 1rem;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 3rem 2rem;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.empty-state p {
-    margin: 0;
-    font-size: 1rem;
+.list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
 }
 
 .roles-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    /* Adaptive Grid: Cards won't get smaller than 280px */
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 1.5rem;
 }
 
 .role-card {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--color-border);
     border-radius: 10px;
-    padding: 1.5rem;
-    transition: all 0.3s ease;
-    cursor: pointer;
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 .role-card:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(100, 108, 255, 0.5);
+    border-color: var(--color-primary);
+    background: rgba(255, 255, 255, 0.06);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .role-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
     margin-bottom: 1rem;
 }
 
 .role-title {
     margin: 0;
-    color: #fff;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 600;
-    flex: 1;
-    word-break: break-word;
-}
-
-.role-interviewer {
-    background: rgba(100, 108, 255, 0.2);
-    color: #646cff;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.85rem;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.role-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.role-date {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.85rem;
-}
-
-.role-card.selected {
-    border-color: #646cff;
-    background: rgba(100, 108, 255, 0.1);
+    color: #fff;
+    line-height: 1.4;
 }
 
 .role-actions {
+    margin-top: auto; /* Pushes actions to bottom */
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 0.75rem;
 }
 
 .action-btn {
-    padding: 0.6rem 1rem;
-    border: none;
+    padding: 0.5rem;
     border-radius: 6px;
+    border: none;
     font-size: 0.85rem;
     font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-align: center;
 }
 
 .manage-btn {
-    background: rgba(100, 108, 255, 0.2);
-    color: #646cff;
-}
-
-.manage-btn:hover {
-    background: rgba(100, 108, 255, 0.3);
+    background: rgba(100, 108, 255, 0.15);
+    color: #8086ff;
 }
 
 .invite-btn {
-    background: rgba(0, 255, 0, 0.2);
-    color: #51cf66;
+    background: rgba(81, 207, 102, 0.15);
+    color: #69db7c;
 }
 
-.invite-btn:hover {
-    background: rgba(0, 255, 0, 0.3);
-}
-
-.responses-btn {
-    background: rgba(255, 152, 0, 0.2);
+/* Full width button for View Responses */
+.role-actions .responses-btn {
+    grid-column: span 2;
+    background: rgba(255, 152, 0, 0.15);
     color: #ff9800;
-    grid-column: 1 / -1;
 }
 
-.responses-btn:hover {
-    background: rgba(255, 152, 0, 0.3);
-}
-
-.error-message {
-    padding: 0.75rem;
-    background: rgba(255, 0, 0, 0.2);
-    border: 1px solid rgba(255, 0, 0, 0.5);
-    border-radius: 8px;
-    color: #ff6b6b;
-    font-size: 0.9rem;
-}
-
-@media (max-width: 768px) {
+/* Mobile Tweaks */
+@media (max-width: 480px) {
     .roles-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .role-header {
-        flex-direction: column;
-        align-items: flex-start;
+        grid-template-columns: 1fr; /* Full width cards on phones */
     }
 
     .role-actions {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr; /* Stack buttons */
     }
 
-    .responses-btn {
-        grid-column: 1;
+    .role-actions .responses-btn {
+        grid-column: span 1;
     }
 }

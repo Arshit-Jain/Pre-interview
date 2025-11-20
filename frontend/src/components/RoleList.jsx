@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import QuestionManager from './QuestionManager';
 import './RoleList.css';
 
-const RoleList = ({ interviewerId, refreshTrigger, onRoleSelect, preview = false }) => {
+const RoleList = ({ interviewerId, refreshTrigger, onManageQuestions, onInvite, preview = false }) => {
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [selectedRoleId, setSelectedRoleId] = useState(null);
-    const [selectedForInvite, setSelectedForInvite] = useState(null);
     const navigate = useNavigate();
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
@@ -28,7 +25,6 @@ const RoleList = ({ interviewerId, refreshTrigger, onRoleSelect, preview = false
             });
 
             let fetchedRoles = response.data.roles || [];
-            // Sort by newest first
             fetchedRoles.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             
             setRoles(fetchedRoles);
@@ -51,7 +47,6 @@ const RoleList = ({ interviewerId, refreshTrigger, onRoleSelect, preview = false
         });
     };
 
-    // Filter for preview mode
     const displayRoles = preview ? roles.slice(0, 3) : roles;
 
     if (loading) return <div className="loading-pulse">Loading roles...</div>;
@@ -77,52 +72,47 @@ const RoleList = ({ interviewerId, refreshTrigger, onRoleSelect, preview = false
                     {displayRoles.map((role) => (
                         <div 
                             key={role.id} 
-                            className={`role-card ${selectedForInvite === role.id ? 'selected' : ''}`}
-                            onClick={() => {
-                                if (preview) {
-                                    navigate('/roles');
-                                }
-                            }}
+                            className="role-card"
                         >
-                            <div className="role-header">
+                            <div className="role-card-top">
                                 <h3 className="role-title">{role.title}</h3>
-                                <span className="role-date">{formatDate(role.created_at)}</span>
+                                <span className="role-date-badge">{formatDate(role.created_at)}</span>
                             </div>
                             
-                            {!preview && (
-                                <div className="role-actions">
+                            {!preview ? (
+                                <div className="role-card-actions">
                                     <button
-                                        className="action-btn manage-btn"
+                                        className="card-btn btn-questions"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setSelectedRoleId(role.id);
+                                            if (onManageQuestions) onManageQuestions(role);
                                         }}
                                     >
                                         Questions
                                     </button>
                                     <button
-                                        className="action-btn invite-btn"
+                                        className="card-btn btn-invite"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setSelectedForInvite(role.id);
-                                            if (onRoleSelect) onRoleSelect(role);
+                                            if (onInvite) onInvite(role);
                                         }}
                                     >
                                         Invite
                                     </button>
                                 </div>
+                            ) : (
+                                <div className="role-card-actions">
+                                    <button 
+                                        className="card-btn btn-view"
+                                        onClick={() => navigate('/roles')}
+                                    >
+                                        Manage
+                                    </button>
+                                </div>
                             )}
-                            {preview && <p className="click-hint">Manage &rarr;</p>}
                         </div>
                     ))}
                 </div>
-            )}
-
-            {!preview && selectedRoleId && (
-                <QuestionManager
-                    roleId={selectedRoleId}
-                    onClose={() => setSelectedRoleId(null)}
-                />
             )}
         </div>
     );

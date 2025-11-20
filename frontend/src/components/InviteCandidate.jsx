@@ -2,7 +2,7 @@ import { useState } from 'react';
 import axios from 'axios';
 import './InviteCandidate.css';
 
-const InviteCandidate = ({ roleId, roleTitle }) => {
+const InviteCandidate = ({ roleId, roleTitle, onClose }) => {
     const [candidateEmail, setCandidateEmail] = useState('');
     const [expiresInDays, setExpiresInDays] = useState(7);
     const [loading, setLoading] = useState(false);
@@ -25,16 +25,9 @@ const InviteCandidate = ({ roleId, roleTitle }) => {
             return;
         }
 
-        // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(candidateEmail)) {
             setError('Please enter a valid email address');
-            setLoading(false);
-            return;
-        }
-
-        if (expiresInDays < 1 || expiresInDays > 30) {
-            setError('Expiration days must be between 1 and 30');
             setLoading(false);
             return;
         }
@@ -63,8 +56,6 @@ const InviteCandidate = ({ roleId, roleTitle }) => {
         } catch (err) {
             if (err.response) {
                 setError(err.response.data.message || 'Failed to send invitation');
-            } else if (err.request) {
-                setError('No response from server. Please try again later.');
             } else {
                 setError(err.message || 'An error occurred');
             }
@@ -73,80 +64,73 @@ const InviteCandidate = ({ roleId, roleTitle }) => {
         }
     };
 
-    const formatDate = (dateString) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+    const handleCopyLink = () => {
+        if (generatedLink?.interview_url) {
+            navigator.clipboard.writeText(generatedLink.interview_url);
+            alert('Link copied to clipboard!');
+        }
     };
 
-    if (!roleId) {
-        return null;
-    }
-
     return (
-        <div className="invite-candidate-container">
-            <h2>Send Interview Invitation</h2>
-            <p className="role-info">Role: <strong>{roleTitle || 'Selected Role'}</strong></p>
+        <div className="invite-candidate-modal-inner">
+            <div className="invite-header">
+                <h2>Invite Candidate</h2>
+                <button className="close-btn" onClick={onClose}>×</button>
+            </div>
             
-            <form onSubmit={handleSubmit} className="invite-form">
-                <div className="form-group">
-                    <label htmlFor="candidateEmail">Candidate Email</label>
-                    <input
-                        type="email"
-                        id="candidateEmail"
-                        value={candidateEmail}
-                        onChange={(e) => setCandidateEmail(e.target.value)}
-                        placeholder="candidate@example.com"
-                        required
-                        disabled={loading}
-                    />
-                </div>
-
-                <div className="form-group">
-                    <label htmlFor="expiresInDays">Link Expires In (Days)</label>
-                    <input
-                        type="number"
-                        id="expiresInDays"
-                        value={expiresInDays}
-                        onChange={(e) => setExpiresInDays(Number(e.target.value))}
-                        min="1"
-                        max="30"
-                        required
-                        disabled={loading}
-                    />
-                    <small>Link will expire after {expiresInDays} day(s)</small>
-                </div>
-
-                {error && <div className="error-message">{error}</div>}
-                {success && <div className="success-message">{success}</div>}
-
-                {generatedLink && (
-                    <div className="link-info">
-                        <h3>Interview Link Generated</h3>
-                        <div className="link-details">
-                            <p><strong>Link:</strong> <a href={generatedLink.interview_url} target="_blank" rel="noopener noreferrer">{generatedLink.interview_url}</a></p>
-                            <p><strong>Expires:</strong> {formatDate(generatedLink.expires_at)}</p>
-                            <p><strong>Candidate:</strong> {generatedLink.candidate_email}</p>
-                        </div>
+            <div className="invite-body">
+                <p className="role-badge">Role: {roleTitle}</p>
+                
+                <form onSubmit={handleSubmit} className="invite-form">
+                    <div className="form-group">
+                        <label>Candidate Email</label>
+                        <input
+                            type="email"
+                            value={candidateEmail}
+                            onChange={(e) => setCandidateEmail(e.target.value)}
+                            placeholder="candidate@example.com"
+                            required
+                            disabled={loading}
+                        />
                     </div>
-                )}
 
-                <button 
-                    type="submit" 
-                    className="submit-button"
-                    disabled={loading || !candidateEmail.trim()}
-                >
-                    {loading ? 'Sending...' : 'Send Invitation'}
-                </button>
-            </form>
+                    <div className="form-group">
+                        <label>Expires In (Days)</label>
+                        <input
+                            type="number"
+                            value={expiresInDays}
+                            onChange={(e) => setExpiresInDays(Number(e.target.value))}
+                            min="1"
+                            max="30"
+                            required
+                            disabled={loading}
+                        />
+                    </div>
+
+                    {error && <div className="error-message">{error}</div>}
+                    {success && <div className="success-message">{success}</div>}
+
+                    {generatedLink && (
+                        <div className="link-result">
+                            <p>Invitation Link Generated:</p>
+                            <div className="link-box">
+                                <input readOnly value={generatedLink.interview_url} />
+                                <button type="button" onClick={handleCopyLink}>Copy</button>
+                            </div>
+                        </div>
+                    )}
+
+                    <button 
+                        type="submit" 
+                        className="submit-button"
+                        disabled={loading || !candidateEmail.trim()}
+                    >
+                        {loading ? 'Sending...' : 'Send Invitation'}
+                    </button>
+                </form>
+            </div>
         </div>
     );
 };
 
 export default InviteCandidate;
-
