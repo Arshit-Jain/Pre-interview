@@ -32,7 +32,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 500 * 1024 * 1024 * 5, // 2.5 GB limit
+    fileSize: 500 * 1024 * 1024 * 10, // 5 GB limit
   },
 });
 

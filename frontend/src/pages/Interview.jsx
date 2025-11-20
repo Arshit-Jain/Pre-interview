@@ -64,7 +64,6 @@ const Interview = () => {
         return mimeType === preferredMimeType ? 'mp4' : 'webm';
     };
 
-
     useEffect(() => {
         const validateLink = async () => {
             try {
@@ -119,7 +118,7 @@ const Interview = () => {
             const autoStart = async () => {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: true, 
+                        video: { facingMode: 'user' }, 
                         audio: true 
                     });
                     questionStreamRef.current = stream;
@@ -191,7 +190,7 @@ const Interview = () => {
     const startCameraTest = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: true, 
+                video: { facingMode: 'user' }, 
                 audio: true 
             });
             streamRef.current = stream;
@@ -199,8 +198,8 @@ const Interview = () => {
             setTimeout(() => {
                 if (testVideoRef.current) {
                     testVideoRef.current.srcObject = stream;
-                    testVideoRef.current.src = ''; // Clear any previous recorded video
-                    testVideoRef.current.controls = false; // Remove controls for live view
+                    testVideoRef.current.src = '';
+                    testVideoRef.current.controls = false;
                     testVideoRef.current.play().catch(err => {
                         console.error('Error playing video:', err);
                     });
@@ -426,7 +425,6 @@ const Interview = () => {
             setCurrentQuestionIndex(currentQuestionIndex + 1);
             startQuestionTimer();
         } else {
-            // Mark as completed
             setAllQuestionsCompleted(true);
             if (questionTimerIntervalRef.current) {
                 clearInterval(questionTimerIntervalRef.current);
@@ -523,20 +521,33 @@ const Interview = () => {
         );
     }
 
-    // Show completion screen FIRST - this is the fix for issue #1
+    // Show completion screen with role and token
     if (allQuestionsCompleted || (questions.length > 0 && currentQuestionIndex >= questions.length)) {
         return (
             <div className="interview-container">
                 <div className="interview-card">
                     <div className="success-icon">✓</div>
-                    <h1>Your Response Has Been Submitted</h1>
-                    <p>Thank you for completing the interview!</p>
-                    <p className="submitted-info">
-                        <strong>Name:</strong> {name}<br />
-                        <strong>Email:</strong> {email}
+                    <h1>Interview Submitted Successfully</h1>
+                    <p style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.8)', marginBottom: '1.5rem' }}>
+                        Thank you for completing your interview!
                     </p>
-                    <p>All your video answers have been successfully recorded and saved.</p>
-                    <p style={{ marginTop: '2rem', color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.9rem' }}>
+                    
+                    <div className="submitted-info">
+                        <p><strong>Name:</strong> {name}</p>
+                        <p><strong>Email:</strong> {email}</p>
+                        <p><strong>Role:</strong> {linkInfo?.role_title || 'N/A'}</p>
+                    </div>
+
+                    <div className="confirmation-token">
+                        <strong>Your Confirmation Token:</strong>
+                        <div className="token-value">{token}</div>
+                    </div>
+
+                    <p className="help-text" style={{ marginTop: '1.5rem' }}>
+                        Save this token for your records. All your video answers have been successfully recorded.
+                    </p>
+                    
+                    <p className="help-text" style={{ marginTop: '0.5rem' }}>
                         You can now close this window.
                     </p>
                 </div>
@@ -639,14 +650,14 @@ const Interview = () => {
                     <div className="question-header">
                         <h1>Question {currentQuestionIndex + 1} of {questions.length}</h1>
                         <div className="timer-display">
-                            Time Remaining: {formatTime(questionTimer)}
+                            Time: {formatTime(questionTimer)}
                         </div>
                     </div>
 
                     <div className="question-content">
                         <h2>{currentQuestion.question_text}</h2>
                         <p className="question-instruction">
-                            Recording will start automatically. You have 10 minutes to record your answer. Click "Next Question" when you're ready to proceed.
+                            Recording starts automatically. You have 10 minutes per answer. Click "Next" when ready to proceed.
                         </p>
                     </div>
 
@@ -703,9 +714,9 @@ const Interview = () => {
                 <div className="interview-card warning-card">
                     <h1>⚠️ Important Warning</h1>
                     <div className="warning-content">
-                        <p><strong>You cannot go back and re-attempt once you proceed.</strong></p>
-                        <p>Make sure your camera and microphone are working correctly before continuing.</p>
-                        <p>You will have 10 minutes to record each answer, and you can move to the next question at any time if the timer is still running.</p>
+                        <p><strong>You cannot go back once you proceed.</strong></p>
+                        <p>Make sure your camera and microphone are working correctly.</p>
+                        <p>You'll have 10 minutes per question and can proceed anytime during recording.</p>
                     </div>
                     <div className="warning-buttons">
                         <button 
@@ -733,7 +744,7 @@ const Interview = () => {
                     <div className="interview-card">
                         <h1>Review Your Test Video</h1>
                         <div className="instructions">
-                            <p>Please review your test video to ensure your camera and microphone are working correctly.</p>
+                            <p>Please review your test video to ensure your camera and microphone work correctly.</p>
                         </div>
                         
                         <div className="video-container">
@@ -742,6 +753,7 @@ const Interview = () => {
                                 src={recordedVideo}
                                 controls
                                 className="test-video"
+                                playsInline
                                 autoPlay={false}
                             />
                         </div>
@@ -751,18 +763,15 @@ const Interview = () => {
                                 <button 
                                     className="submit-button secondary-button"
                                     onClick={async () => {
-                                        // Reset states
                                         setRecordedVideo(null);
                                         setIsRecording(false);
                                         setRecordingTime(0);
                                         
-                                        // Stop any existing stream
                                         if (streamRef.current) {
                                             streamRef.current.getTracks().forEach(track => track.stop());
                                             streamRef.current = null;
                                         }
                                         
-                                        // Clear the video element completely
                                         if (testVideoRef.current) {
                                             testVideoRef.current.srcObject = null;
                                             testVideoRef.current.src = '';
@@ -770,15 +779,13 @@ const Interview = () => {
                                             testVideoRef.current.load();
                                         }
                                         
-                                        // Start camera again with a fresh stream
                                         try {
                                             const stream = await navigator.mediaDevices.getUserMedia({ 
-                                                video: true, 
+                                                video: { facingMode: 'user' }, 
                                                 audio: true 
                                             });
                                             streamRef.current = stream;
                                             
-                                            // Wait a moment before setting the new stream
                                             setTimeout(() => {
                                                 if (testVideoRef.current) {
                                                     testVideoRef.current.srcObject = stream;
@@ -813,8 +820,8 @@ const Interview = () => {
                 <div className="interview-card">
                     <h1>Camera & Hardware Test</h1>
                     <div className="instructions">
-                        <p><strong>Please record a 30-second test video saying "1, 2, 3, 4, 5"</strong></p>
-                        <p>This will help us verify that your camera and microphone are working correctly.</p>
+                        <p><strong>Record a 30-second test video saying "1, 2, 3, 4, 5"</strong></p>
+                        <p>This verifies your camera and microphone work correctly.</p>
                     </div>
                     
                     <div className="video-container">
