@@ -20,8 +20,9 @@ const RecentResponses = ({ limit = 5 }) => {
                     }
                 );
                 
+                // Assuming the backend returns a list of responses
+                // We might need to flatten or process if the structure is nested
                 const allResponses = response.data.responses || [];
-                // Slice client side since backend might return all
                 setResponses(allResponses.slice(0, limit));
             } catch (err) {
                 console.error('Failed to fetch recent responses', err);
@@ -34,6 +35,7 @@ const RecentResponses = ({ limit = 5 }) => {
     }, [limit, backendUrl]);
 
     const formatDate = (dateString) => {
+        if (!dateString) return '';
         const date = new Date(dateString);
         const now = new Date();
         const diffTime = Math.abs(now - date);
@@ -51,32 +53,42 @@ const RecentResponses = ({ limit = 5 }) => {
             <div className="widget-header">
                 <h2>Recent Activity</h2>
                 <button onClick={() => navigate('/responses')} className="view-all-btn">
-                    View All
+                    View All &rarr;
                 </button>
             </div>
 
             {responses.length === 0 ? (
                 <div className="empty-state">
-                    <p>No responses yet.</p>
+                    <p>No recent activity.</p>
                 </div>
             ) : (
-                <div className="responses-list-compact">
+                <div className="activity-list">
                     {responses.map((resp) => (
                         <div 
                             key={resp.interview_token} 
-                            className="response-item-compact"
+                            className="activity-item"
                             onClick={() => navigate(`/responses/${resp.interview_token}`)}
                         >
-                            <div className="resp-avatar">
+                            <div className="activity-icon">
                                 {resp.candidate_email.charAt(0).toUpperCase()}
                             </div>
-                            <div className="resp-details">
-                                <div className="resp-top">
-                                    <span className="resp-email">{resp.candidate_email}</span>
-                                    <span className="resp-time">{formatDate(resp.last_response_at)}</span>
+                            <div className="activity-content">
+                                <div className="activity-main">
+                                    <span className="candidate-name">{resp.candidate_email}</span>
+                                    <span className="activity-action">completed an interview for</span>
+                                    <span className="role-name">{resp.role_title}</span>
                                 </div>
-                                <div className="resp-role">{resp.role_title}</div>
+                                <div className="activity-meta">
+                                    <span className="response-count">
+                                        {resp.answer_count} {resp.answer_count === 1 ? 'answer' : 'answers'}
+                                    </span>
+                                    <span className="dot">•</span>
+                                    <span className="activity-date">
+                                        {formatDate(resp.last_response_at)}
+                                    </span>
+                                </div>
                             </div>
+                            <div className="activity-arrow">&rsaquo;</div>
                         </div>
                     ))}
                 </div>

@@ -1,5 +1,3 @@
-// frontend/src/pages/AllResponses.jsx - Updated version with auto-stitching
-
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
@@ -13,168 +11,80 @@ const AllResponses = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [selectedRoleId, setSelectedRoleId] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
+    
+    // Detail view state
     const [selectedResponse, setSelectedResponse] = useState(null);
     const [videoAnswers, setVideoAnswers] = useState([]);
     const [loadingAnswers, setLoadingAnswers] = useState(false);
-    const [videoBlobUrls, setVideoBlobUrls] = useState({});
     
+    // Stitched video state
     const [stitchedVideoGcsUrl, setStitchedVideoGcsUrl] = useState(null);
     const [stitchedVideoBlobUrl, setStitchedVideoBlobUrl] = useState(null);
     const [loadingStitchedVideo, setLoadingStitchedVideo] = useState(false);
     const [stitching, setStitching] = useState(false);
     const [fromCache, setFromCache] = useState(false);
+    
+    // Individual video blobs map
+    const [videoBlobUrls, setVideoBlobUrls] = useState({});
 
     const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
 
+    // Initial data load
     useEffect(() => {
-        console.log('[AllResponses] Component mounted/updated', { token });
         fetchRoles();
-        if (!token) {
-            fetchResponses();
-        } else {
-            console.log('[AllResponses] Token present, setting loading to false');
-            setLoading(false);
-            fetchVideoAnswers(token);
-        }
-    }, []);
-
-    useEffect(() => {
         if (token) {
-            console.log('[AllResponses] Token detected, fetching video answers:', token);
+            // Direct navigation to a specific response
             fetchVideoAnswers(token);
+        } else {
+            // Load list view
+            fetchResponses();
         }
-        
-        // Cleanup function to prevent memory leaks
-        return () => {
-            // Cancel any ongoing operations if component unmounts
-            console.log('[AllResponses] Cleaning up on token change');
-        };
-    }, [token]);
+    }, [token]); // Re-run if URL token changes
 
+    // Clean up blob URLs on unmount
     useEffect(() => {
-        if (videoAnswers.length > 0) {
-            const fetchVideoBlobs = async () => {
-                const authToken = localStorage.getItem('token');
-                if (!authToken) {
-                    setError('Authentication token not found. Cannot load videos.');
-                    return;
-                }
-
-                const blobUrlMap = {};
-                for (const answer of videoAnswers) {
-                    if (answer.video_url) {
-                        try {
-                            const response = await axios.get(
-                                `${backendUrl}/api/interviews/video-proxy?url=${encodeURIComponent(answer.video_url)}`,
-                                {
-                                    headers: {
-                                        'Authorization': `Bearer ${authToken}`
-                                    },
-                                    responseType: 'blob'
-                                }
-                            );
-                            const mimeType = response.headers['content-type'] || getMimeTypeFromUrl(answer.video_url);
-                            const blob = new Blob([response.data], { type: mimeType });
-                            blobUrlMap[answer.id] = URL.createObjectURL(blob);
-                        } catch (err) {
-                            console.error(`[AllResponses] Failed to fetch video blob for answer ${answer.id}:`, err);
-                            blobUrlMap[answer.id] = null;
-                        }
-                    }
-                }
-                setVideoBlobUrls(blobUrlMap);
-            };
-            fetchVideoBlobs();
-        }
-
         return () => {
-            setVideoBlobUrls(prevUrls => {
-                Object.values(prevUrls).forEach(url => {
-                    if (url) URL.revokeObjectURL(url);
-                });
-                return {};
+            // Cleanup logic
+            if (stitchedVideoBlobUrl) URL.revokeObjectURL(stitchedVideoBlobUrl);
+            Object.values(videoBlobUrls).forEach(url => {
+                if (url) URL.revokeObjectURL(url);
             });
         };
-    }, [videoAnswers, backendUrl]);
+    }, [stitchedVideoBlobUrl, videoBlobUrls]);
 
+    // Fetch responses when filter changes
     useEffect(() => {
         if (!token) {
             fetchResponses();
         }
     }, [selectedRoleId]);
-    
+
+    // Load stitched video when GCS URL is available
     useEffect(() => {
-        if (!stitchedVideoGcsUrl) {
-            return;
-        }
-
-        const fetchStitchedVideoBlob = async () => {
-            console.log('[AllResponses] GCS URL set, fetching blob for stitched video...');
-            setLoadingStitchedVideo(true);
-            
-            const authToken = localStorage.getItem('token');
-            if (!authToken) {
-                setError('Authentication token not found. Cannot load stitched video.');
-                setLoadingStitchedVideo(false);
-                return;
-            }
-
-            try {
-                const response = await axios.get(
-                    `${backendUrl}/api/interviews/video-proxy?url=${encodeURIComponent(stitchedVideoGcsUrl)}`,
-                    {
-                        headers: { 'Authorization': `Bearer ${authToken}` },
-                        responseType: 'blob'
-                    }
-                );
-                
-                const mimeType = response.headers['content-type'] || getMimeTypeFromUrl(stitchedVideoGcsUrl);
-                const blob = new Blob([response.data], { type: mimeType });
-                const blobUrl = URL.createObjectURL(blob);
-                
-                console.log('[AllResponses] Stitched video blob URL created:', blobUrl);
-                setStitchedVideoBlobUrl(blobUrl);
-
-            } catch (err) {
-                console.error('[AllResponses] Failed to fetch stitched video blob:', err);
-                setError('Failed to load the combined video.');
-            } finally {
-                setLoadingStitchedVideo(false);
-            }
-        };
-
+        if (!stitchedVideoGcsUrl) return;
         fetchStitchedVideoBlob();
+    }, [stitchedVideoGcsUrl]);
 
-        return () => {
-            setStitchedVideoBlobUrl(prevUrl => {
-                if (prevUrl) {
-                    URL.revokeObjectURL(prevUrl);
-                }
-                return null;
-            });
-        };
-    }, [stitchedVideoGcsUrl, backendUrl]);
+    // Load individual video blobs when answers are loaded
+    useEffect(() => {
+        if (videoAnswers.length > 0) {
+            fetchIndividualVideoBlobs();
+        }
+    }, [videoAnswers]);
 
     const fetchRoles = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get(
-                `${backendUrl}/api/roles/my-interviewer`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
-            );
-
-            if (response.data.interviewer?.id) {
+            // Get current interviewer ID
+            const meResponse = await axios.get(`${backendUrl}/api/roles/my-interviewer`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (meResponse.data.interviewer?.id) {
                 const rolesResponse = await axios.get(
-                    `${backendUrl}/api/roles/interviewer/${response.data.interviewer.id}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    }
+                    `${backendUrl}/api/roles/interviewer/${meResponse.data.interviewer.id}`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
                 );
                 setRoles(rolesResponse.data.roles || []);
             }
@@ -184,154 +94,128 @@ const AllResponses = () => {
     };
 
     const fetchResponses = async () => {
-        console.log('[AllResponses] Starting to fetch responses...', { selectedRoleId });
         setLoading(true);
         setError('');
-
         try {
             const token = localStorage.getItem('token');
             const params = selectedRoleId !== 'all' ? { role_id: selectedRoleId } : {};
             
-            const response = await axios.get(
-                `${backendUrl}/api/interviews/responses`,
-                {
-                    params,
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
-            );
+            const response = await axios.get(`${backendUrl}/api/interviews/responses`, {
+                params,
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             
             setResponses(response.data.responses || []);
         } catch (err) {
-            console.error('[AllResponses] Error fetching responses:', err);
-            if (err.response) {
-                setError(err.response.data.message || 'Failed to load responses');
-            } else {
-                setError('Failed to load responses');
-            }
+            console.error('Error fetching responses:', err);
+            setError(err.response?.data?.message || 'Failed to load responses');
         } finally {
             setLoading(false);
         }
     };
 
     const fetchVideoAnswers = async (interviewToken) => {
-        console.log('[AllResponses] fetchVideoAnswers called with token:', interviewToken);
         setLoadingAnswers(true);
-        setLoading(false);
-        
-        setStitchedVideoGcsUrl(null);
-        setStitchedVideoBlobUrl(null);
-        setFromCache(false);
+        // If we navigated directly here, main loading might be true
+        setLoading(false); 
         setError('');
+        setStitchedVideoGcsUrl(null);
+        setFromCache(false);
 
         try {
-            const authToken = localStorage.getItem('token');
-            
+            const token = localStorage.getItem('token');
             const response = await axios.get(
                 `${backendUrl}/api/interviews/responses/${interviewToken}`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
-                }
+                { headers: { 'Authorization': `Bearer ${token}` } }
             );
             
-            const answers = response.data.video_answers || [];
-            const interviewData = response.data.interview;
-            const existingStitchedUrl = response.data.stitched_video_url;
+            const { video_answers, interview, stitched_video_url } = response.data;
             
-            const filteredAnswers = answers.filter(a => a.interview_link_token === interviewToken);
+            setVideoAnswers(video_answers || []);
+            setSelectedResponse(interview);
             
-            setVideoAnswers(filteredAnswers);
-            setSelectedResponse(interviewData);
-            setLoadingAnswers(false); // Set loading false here
-            
-            // If stitched video exists, load it automatically
-            if (existingStitchedUrl) {
-                console.log('[AllResponses] Existing stitched video found:', existingStitchedUrl);
-                setStitchedVideoGcsUrl(existingStitchedUrl);
+            if (stitched_video_url) {
+                setStitchedVideoGcsUrl(stitched_video_url);
                 setFromCache(true);
-            } else if (filteredAnswers.length > 0) {
-                // If no stitched video exists but we have answers, create one automatically
-                // But do it AFTER setting state to prevent race conditions
-                console.log('[AllResponses] No stitched video found, will create automatically...');
-                // Use setTimeout to ensure state is updated first
-                setTimeout(() => {
-                    handleStitchVideos(interviewToken);
-                }, 100);
+            } else if (video_answers?.length > 0) {
+                // Auto stitch if not exists
+                handleStitchVideos(interviewToken);
             }
         } catch (err) {
-            console.error('[AllResponses] Failed to fetch video answers:', err);
-            if (err.response) {
-                setError(err.response.data.message || 'Failed to load video answers');
-            } else {
-                setError('Failed to load video answers');
-            }
+            console.error('Failed to fetch video answers:', err);
+            setError(err.response?.data?.message || 'Failed to load interview details');
+        } finally {
             setLoadingAnswers(false);
         }
     };
 
-    const handleStitchVideos = async (interviewToken = token) => {
-        // Prevent multiple simultaneous stitching attempts
-        if (stitching) {
-            console.log('[AllResponses] Already stitching, ignoring duplicate request');
-            return;
-        }
-
-        console.log('[AllResponses] Starting video stitching...');
-        setStitching(true);
-        setError('');
-        
+    const fetchStitchedVideoBlob = async () => {
+        if (!stitchedVideoGcsUrl) return;
+        setLoadingStitchedVideo(true);
         try {
-            const authToken = localStorage.getItem('token');
-            const response = await axios.post(
-                `${backendUrl}/api/interviews/stitch-video/${interviewToken}`,
-                {},
+            const token = localStorage.getItem('token');
+            const response = await axios.get(
+                `${backendUrl}/api/interviews/video-proxy?url=${encodeURIComponent(stitchedVideoGcsUrl)}`,
                 {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    responseType: 'blob'
                 }
             );
-
-            console.log('[AllResponses] Stitched video response:', response.data);
-            
-            if (response.data.from_cache) {
-                console.log('[AllResponses] Using cached stitched video');
-            } else {
-                console.log('[AllResponses] New stitched video created');
-            }
-            
-            setStitchedVideoGcsUrl(response.data.stitched_url);
-            setFromCache(response.data.from_cache || false);
-
+            const blobUrl = URL.createObjectURL(response.data);
+            setStitchedVideoBlobUrl(blobUrl);
         } catch (err) {
-            console.error('[AllResponses] Failed to stitch videos:', err);
-            
-            // Check if error is because video already exists
-            if (err.response?.data?.stitched_url) {
-                console.log('[AllResponses] Video already exists, using cached version');
-                setStitchedVideoGcsUrl(err.response.data.stitched_url);
-                setFromCache(true);
-            } else {
-                setError(err.response?.data?.message || 'Failed to stitch videos together');
-            }
+            console.error('Failed to load stitched video blob', err);
         } finally {
-            setStitching(false);
+            setLoadingStitchedVideo(false);
         }
     };
 
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+    const fetchIndividualVideoBlobs = async () => {
+        const token = localStorage.getItem('token');
+        const newBlobUrls = {};
+        
+        // Process sequentially or parallel (parallel better for performance but heavier)
+        await Promise.all(videoAnswers.map(async (answer) => {
+            if (!answer.video_url) return;
+            try {
+                const response = await axios.get(
+                    `${backendUrl}/api/interviews/video-proxy?url=${encodeURIComponent(answer.video_url)}`,
+                    {
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        responseType: 'blob'
+                    }
+                );
+                newBlobUrls[answer.id] = URL.createObjectURL(response.data);
+            } catch (err) {
+                console.error(`Failed load video ${answer.id}`, err);
+                newBlobUrls[answer.id] = null; // Mark as failed
+            }
+        }));
+        
+        setVideoBlobUrls(prev => ({ ...prev, ...newBlobUrls }));
+    };
+
+    const handleStitchVideos = async (interviewToken) => {
+        if (stitching) return;
+        setStitching(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(
+                `${backendUrl}/api/interviews/stitch-video/${interviewToken}`,
+                {},
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            
+            if (response.data.stitched_url) {
+                setStitchedVideoGcsUrl(response.data.stitched_url);
+                setFromCache(response.data.from_cache || false);
+            }
+        } catch (err) {
+            console.error('Stitch error:', err);
+            // Don't set main error state here to keep UI usable, just log it
+        } finally {
+            setStitching(false);
+        }
     };
 
     const handleLogout = () => {
@@ -340,220 +224,214 @@ const AllResponses = () => {
         navigate('/login');
     };
 
-    const getMimeTypeFromUrl = (url) => {
-        if (!url) return null;
-        try {
-            const parsedUrl = new URL(url); 
-            const pathname = parsedUrl.pathname;
-            const extension = pathname.split('.').pop().toLowerCase();
-            
-            switch (extension) {
-                case 'webm':
-                    return 'video/webm';
-                case 'mp4':
-                    return 'video/mp4';
-                case 'ogv':
-                    return 'video/ogg';
-                default:
-                    return 'video/mp4'; 
-            }
-        } catch (e) {
-            return 'video/mp4';
+    const handleSearch = (e) => {
+        e.preventDefault();
+        if (!searchQuery.trim()) return;
+
+        // If it looks like a UUID/Token (contains dashes, long enough), try direct navigation
+        if (searchQuery.trim().length > 20 && searchQuery.includes('-')) {
+            navigate(`/responses/${searchQuery.trim()}`);
         }
     };
 
+    // Filter displayed list based on search query
+    const filteredResponses = responses.filter(r => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            r.candidate_email.toLowerCase().includes(q) || 
+            (r.candidate_name && r.candidate_name.toLowerCase().includes(q)) ||
+            r.interview_token.toLowerCase().includes(q)
+        );
+    });
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    // --- RENDER HELPERS ---
+
+    // Loading State
     if (loading) {
         return (
-            <div className="all-responses-container">
-                <div className="loading-message">Loading responses...</div>
+            <div className="all-responses-container loading-container">
+                <div className="spinner"></div>
+                <p>Loading...</p>
             </div>
         );
     }
 
-    return (
-        <div className="all-responses-container">
-            <div className="responses-page-header">
-                <div>
-                    <h1>All Responses</h1>
-                    <p>View and manage candidate interview responses</p>
-                </div>
-                <div className="header-actions">
+    // Detail View (Video Player)
+    if (token || selectedResponse) {
+        return (
+            <div className="all-responses-container detail-view">
+                <header className="responses-header detail-header">
                     <button 
-                        className="back-button"
+                        className="back-btn" 
                         onClick={() => navigate('/dashboard')}
                     >
-                        ← Back to Dashboard
+                        &larr; Back
                     </button>
-                    <button 
-                        className="logout-button"
-                        onClick={handleLogout}
-                    >
-                        Logout
-                    </button>
-                </div>
-            </div>
-
-            <div className="filter-section">
-                <label htmlFor="role-filter">Filter by Role:</label>
-                <select
-                    id="role-filter"
-                    value={selectedRoleId}
-                    onChange={(e) => setSelectedRoleId(e.target.value)}
-                    className="role-filter-select"
-                >
-                    <option value="all">All Roles</option>
-                    {roles.map(role => (
-                        <option key={role.id} value={role.id}>
-                            {role.title}
-                        </option>
-                    ))}
-                </select>
-            </div>
-
-            {error && <div className="error-message">{error}</div>}
-
-            {(selectedResponse || token) ? (
-                <div className="response-detail-view">
-                    <button 
-                        className="back-to-list-button"
-                        onClick={() => {
-                            setSelectedResponse(null);
-                            setVideoAnswers([]);
-                            setStitchedVideoGcsUrl(null);
-                            setStitchedVideoBlobUrl(null);
-                            navigate('/responses');
-                        }}
-                    >
-                        ← Back to List
-                    </button>
-                    
-                    <div className="response-detail-header">
-                        <h2>{selectedResponse?.candidate_email || 'Loading...'}</h2>
-                        {selectedResponse?.role_title && (
-                            <span className="role-badge">{selectedResponse.role_title}</span>
-                        )}
+                    <div className="header-info">
+                        <h1>{selectedResponse?.candidate_email || 'Candidate Response'}</h1>
+                        <span className="role-tag">{selectedResponse?.role_title}</span>
                     </div>
+                </header>
 
-                    {loadingAnswers ? (
-                        <div className="loading-message">Loading video answers...</div>
-                    ) : error && videoAnswers.length === 0 ? (
-                        <div className="error-message">{error}</div>
-                    ) : videoAnswers.length > 0 ? (
-                        <div className="video-answers-section">
-                            <h3>Individual Answers ({videoAnswers.length} total)</h3>
-                            <div className="individual-videos">
-                                {videoAnswers
-                                    .filter(a => a.interview_link_token === (token || selectedResponse?.token))
-                                    .sort((a, b) => a.question_order - b.question_order)
-                                    .map((answer) => (
-                                        <div key={answer.id} className="answer-item">
-                                            <h4>Question {answer.question_order}: {answer.question_text}</h4>
-                                            {answer.video_url ? (
-                                                videoBlobUrls[answer.id] === null ? (
-                                                    <div className="no-video">Error loading video</div>
-                                                ) : videoBlobUrls[answer.id] ? (
-                                                    <video 
-                                                        key={`video-${answer.id}`}
-                                                        src={videoBlobUrls[answer.id]}
-                                                        controls
-                                                        className="answer-video"
-                                                        preload="metadata"
-                                                    />
-                                                ) : (
-                                                    <div className="no-video">Loading video...</div>
-                                                )
-                                            ) : (
-                                                <div className="no-video">Video URL not available</div>
-                                            )}
-                                            {/* <p className="answer-meta">
-                                                Duration: {answer.recording_duration ? formatTime(answer.recording_duration) : 'N/A'}
-                                            </p> */}
+                {error && <div className="error-banner">{error}</div>}
+
+                <div className="video-layout">
+                    {/* Main Player - Stitched Video */}
+                    <section className="main-video-section">
+                        <h3>Full Interview</h3>
+                        <div className="video-wrapper">
+                            {loadingStitchedVideo || stitching ? (
+                                <div className="video-placeholder">
+                                    <div className="spinner"></div>
+                                    <p>{stitching ? 'Creating full video...' : 'Loading full video...'}</p>
+                                </div>
+                            ) : stitchedVideoBlobUrl ? (
+                                <video 
+                                    controls 
+                                    src={stitchedVideoBlobUrl} 
+                                    className="main-player" 
+                                    controlsList="nodownload"
+                                />
+                            ) : (
+                                <div className="video-placeholder">
+                                    <p>Video unavailable</p>
+                                </div>
+                            )}
+                        </div>
+                        {/* fromCache && <p className="video-note"><small>✓ Loaded from storage</small></p> */}
+                    </section>
+
+                    {/* Sidebar - Individual Clips */}
+                    <section className="clips-sidebar">
+                        <h3>Individual Answers ({videoAnswers.length})</h3>
+                        <div className="clips-list">
+                            {loadingAnswers ? (
+                                <div className="clips-loading">Loading clips...</div>
+                            ) : videoAnswers.length === 0 ? (
+                                <div className="clips-empty">No answers recorded</div>
+                            ) : (
+                                videoAnswers.map((answer, index) => (
+                                    <div key={answer.id} className="clip-item">
+                                        <div className="clip-header">
+                                            <span className="clip-number">Q{index + 1}</span>
+                                            <span className="clip-question" title={answer.question_text}>
+                                                {answer.question_text}
+                                            </span>
                                         </div>
-                                    ))}
-                            </div>
-
-                            <div className="stitched-video-section">
-                                <h3>Complete Interview (Single Video)</h3>
-                                
-                                {stitching ? (
-                                    <div className="loading-message">
-                                        <div className="spinner"></div>
-                                        <p>Creating combined video... This may take a few minutes.</p>
+                                        <div className="clip-player-wrapper">
+                                            {videoBlobUrls[answer.id] ? (
+                                                <video 
+                                                    controls 
+                                                    src={videoBlobUrls[answer.id]} 
+                                                    className="clip-player"
+                                                />
+                                            ) : (
+                                                <div className="clip-placeholder">Loading...</div>
+                                            )}
+                                        </div>
                                     </div>
-                                ) : loadingStitchedVideo ? (
-                                    <div className="loading-message">
-                                        <div className="spinner"></div>
-                                        <p>Loading combined video...</p>
-                                    </div>
-                                ) : stitchedVideoBlobUrl ? (
-                                    <div>
-                                        {fromCache && (
-                                            <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                                                ✓ Previously created video loaded
-                                            </p>
-                                        )}
-                                        <video 
-                                            src={stitchedVideoBlobUrl}
-                                            controls
-                                            className="stitched-video"
-                                            preload="metadata"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="stitch-prompt">
-                                        <p>No combined video found. Creating one now...</p>
-                                        <div className="spinner"></div>
-                                    </div>
-                                )}
-                            </div>
+                                ))
+                            )}
                         </div>
-                    ) : (
-                        <div className="no-answers">
-                            <p>No video answers found for this interview.</p>
-                        </div>
-                    )}
+                    </section>
                 </div>
-            ) : (
-                <div className="responses-list">
-                    {responses.length === 0 ? (
-                        <div className="no-responses">
-                            <p>No responses found{selectedRoleId !== 'all' ? ' for this role' : ''}.</p>
-                        </div>
-                    ) : (
-                        <div className="responses-grid">
-                            {responses.map((response) => (
-                                <div 
-                                    key={response.interview_token} 
-                                    className="response-card"
-                                    onClick={() => navigate(`/responses/${response.interview_token}`)}
-                                >
-                                    <div className="response-header">
-                                        <h3>{response.candidate_name || response.candidate_email}</h3>
-                                        <span className="role-badge">{response.role_title}</span>
+            </div>
+        );
+    }
+
+    // List View (Default)
+    return (
+        <div className="all-responses-container list-view">
+            <header className="responses-header">
+                <div className="header-title">
+                    <h1>All Responses</h1>
+                    <p>Manage candidate submissions</p>
+                </div>
+                <div className="header-actions">
+                    <form onSubmit={handleSearch} className="search-form">
+                        <input 
+                            type="text" 
+                            className="search-input"
+                            placeholder="Search by token or email..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <button type="submit" className="search-btn">Go</button>
+                    </form>
+
+                    <select 
+                        className="role-select"
+                        value={selectedRoleId}
+                        onChange={(e) => setSelectedRoleId(e.target.value)}
+                    >
+                        <option value="all">All Roles</option>
+                        {roles.map(r => (
+                            <option key={r.id} value={r.id}>{r.title}</option>
+                        ))}
+                    </select>
+                    <button className="logout-btn-small" onClick={handleLogout}>Logout</button>
+                </div>
+            </header>
+
+            {error && <div className="error-banner">{error}</div>}
+
+            <main className="responses-grid-container">
+                {filteredResponses.length === 0 ? (
+                    <div className="empty-state-large">
+                        <div className="empty-icon">🔍</div>
+                        <h3>No responses found</h3>
+                        <p>Try adjusting your search or filters.</p>
+                    </div>
+                ) : (
+                    <div className="responses-grid">
+                        {filteredResponses.map(resp => (
+                            <div 
+                                key={resp.interview_token} 
+                                className="response-card"
+                                onClick={() => navigate(`/responses/${resp.interview_token}`)}
+                            >
+                                <div className="card-header">
+                                    <div className="candidate-avatar">
+                                        {resp.candidate_email.charAt(0).toUpperCase()}
                                     </div>
-                                    <div className="response-info">
-                                        <p className="response-email">{response.candidate_email}</p>
-                                        <p className="response-meta">
-                                            <span>{response.answer_count} answer{response.answer_count !== 1 ? 's' : ''}</span>
-                                            <span className="separator">•</span>
-                                            <span>{formatDate(response.last_response_at)}</span>
-                                        </p>
+                                    <div className="card-title">
+                                        <h4>{resp.candidate_email}</h4>
+                                        <span className="card-role">{resp.role_title}</span>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
+                                <div className="card-stats">
+                                    <div className="stat">
+                                        <span className="stat-label">Answers</span>
+                                        <span className="stat-value">{resp.answer_count}</span>
+                                    </div>
+                                    <div className="stat">
+                                        <span className="stat-label">Date</span>
+                                        <span className="stat-value">{formatDate(resp.last_response_at)}</span>
+                                    </div>
+                                </div>
+                                <div className="card-footer">
+                                    <span>View Details</span>
+                                    <span>&rarr;</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </main>
         </div>
     );
-};
-
-const formatTime = (seconds) => {
-    if (!seconds) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
 export default AllResponses;
