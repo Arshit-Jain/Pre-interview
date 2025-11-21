@@ -433,6 +433,13 @@ const Interview = () => {
                 questionStreamRef.current.getTracks().forEach(track => track.stop());
                 questionStreamRef.current = null;
             }
+            
+            // Notify backend that interview is finished to send emails
+            try {
+                await axios.post(`${backendUrl}/api/interviews/finish/${token}`);
+            } catch (e) {
+                console.error('Failed to send completion notification:', e);
+            }
         }
     };
 

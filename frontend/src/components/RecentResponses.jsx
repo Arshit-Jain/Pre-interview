@@ -36,15 +36,28 @@ const RecentResponses = ({ limit = 5 }) => {
 
     const formatDate = (dateString) => {
         if (!dateString) return '';
+    
+        // Convert input date to MDT (UTC-6)
         const date = new Date(dateString);
+        const dateInMDT = new Date(date.toLocaleString('en-US', { timeZone: 'America/Denver' }));
+    
+        // Current time in MDT
         const now = new Date();
-        const diffTime = Math.abs(now - date);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
+        const nowInMDT = new Date(now.toLocaleString('en-US', { timeZone: 'America/Denver' }));
+    
+        // Diff in days (rounded up)
+        const diffTime = Math.abs(nowInMDT - dateInMDT);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // 86,400,000 ms per day
+    
         if (diffDays < 1) return 'Today';
         if (diffDays === 1) return 'Yesterday';
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    
+        return dateInMDT.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+        });
     };
+    
 
     if (loading) return <div className="loading-placeholder">Loading activity...</div>;
 

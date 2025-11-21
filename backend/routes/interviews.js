@@ -317,6 +317,70 @@ router.post('/mark-used/:token', async (req, res) => {
   }
 });
 
+// Finish interview (send confirmation emails)
+router.post('/finish/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    // Get full details including interviewer info
+    const link = await getInterviewLinkByToken(token);
+
+    if (!link) {
+      return res.status(404).json({ message: 'Interview link not found' });
+    }
+
+    // Send email to candidate
+    const candidateSubject = `Interview Submitted Successfully - ${link.role_title}`;
+    const candidateText = `Hello,
+
+Thank you for completing your interview for the ${link.role_title} position.
+
+We have successfully received your video responses.
+Submission ID: ${link.unique_token}
+
+You can reference this ID if you ever need to follow up regarding your application.
+
+Best regards,
+Interview Team`;
+
+    try {
+      await sendEmail(link.candidate_email, candidateText, candidateSubject);
+      console.log(`Confirmation email sent to candidate: ${link.candidate_email}`);
+    } catch (emailErr) {
+      console.error('Failed to send candidate confirmation email:', emailErr);
+    }
+
+    // Send email to interviewer
+    if (link.interviewer_email) {
+      const interviewerSubject = `New Interview Submission - ${link.role_title}`;
+      const interviewerText = `Hello ${link.interviewer_name || 'Interviewer'},
+
+A new interview has been submitted for the ${link.role_title} position.
+
+Candidate: ${link.candidate_email}
+Submission ID: ${link.unique_token}
+
+You can view the responses and the full recording in your dashboard.
+
+Best regards,
+Interview Platform`;
+
+      try {
+        await sendEmail(link.interviewer_email, interviewerText, interviewerSubject);
+        console.log(`Notification email sent to interviewer: ${link.interviewer_email}`);
+      } catch (emailErr) {
+        console.error('Failed to send interviewer notification email:', emailErr);
+      }
+    }
+
+    res.json({ message: 'Interview finished and emails sent' });
+
+  } catch (error) {
+    console.error('Finish interview error:', error);
+    res.status(500).json({ message: 'Error finishing interview' });
+  }
+});
+
 // Submit interview (when candidate completes it) - kept for backward compatibility
 router.post('/submit/:token', async (req, res) => {
   try {

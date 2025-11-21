@@ -35,45 +35,55 @@ export async function getInterviewLinkByToken(token) {
     throw new Error('Token is required');
   }
 
-  // Try to get link with interview and role info
-  // If interviews table doesn't exist, we'll handle it gracefully
+  // Try to get link with interview, role, and interviewer info
   try {
     const result = await sql`
-      SELECT il.*, i.role_id, r.title as role_title
+      SELECT 
+        il.*, 
+        i.role_id, 
+        r.title as role_title,
+        int.email as interviewer_email,
+        int.name as interviewer_name
       FROM interview_links il
       JOIN interviews i ON il.interview_id = i.id
       JOIN roles r ON i.role_id = r.id
+      LEFT JOIN interviewers int ON r.interviewer_id = int.id
       WHERE il.unique_token = ${token}
       LIMIT 1
     `;
 
     return result.length > 0 ? result[0] : null;
   } catch (error) {
-    // Fallback if interviews table structure is different
-    // Try to get role_id directly from interview_links if it has that column
-    const result = await sql`
-      SELECT il.*
-      FROM interview_links il
-      WHERE il.unique_token = ${token}
-      LIMIT 1
-    `;
+    console.error('Error in getInterviewLinkByToken:', error);
+    // Fallback if table structure implies different relationships
+    try {
+      const result = await sql`
+        SELECT il.*
+        FROM interview_links il
+        WHERE il.unique_token = ${token}
+        LIMIT 1
+      `;
 
-    if (result.length > 0) {
-      // If we have interview_id, try to get role info
-      try {
-        const roleInfo = await sql`
-          SELECT r.id as role_id, r.title as role_title
-          FROM interviews i
-          JOIN roles r ON i.role_id = r.id
-          WHERE i.id = ${result[0].interview_id}
-          LIMIT 1
-        `;
-        return { ...result[0], ...roleInfo[0] };
-      } catch {
-        return result[0];
+      if (result.length > 0) {
+        // Try to fetch basic role info if possible, ignoring interviewer for fallback
+        try {
+          const roleInfo = await sql`
+            SELECT r.id as role_id, r.title as role_title
+            FROM interviews i
+            JOIN roles r ON i.role_id = r.id
+            WHERE i.id = ${result[0].interview_id}
+            LIMIT 1
+          `;
+          return { ...result[0], ...roleInfo[0] };
+        } catch {
+          return result[0];
+        }
       }
+      return null;
+    } catch (fallbackError) {
+       console.error('Fallback error in getInterviewLinkByToken:', fallbackError);
+       return null;
     }
-    return null;
   }
 }
 
