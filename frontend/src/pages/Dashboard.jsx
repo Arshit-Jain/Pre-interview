@@ -11,7 +11,7 @@ const Dashboard = () => {
     const [interviewerId, setInterviewerId] = useState(null);
     const [loading, setLoading] = useState(true);
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     useEffect(() => {
         const token = localStorage.getItem('token');

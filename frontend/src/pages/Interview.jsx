@@ -47,7 +47,7 @@ const Interview = () => {
     const isRecordingRef = useRef(false);
     const isTestRecordingRef = useRef(false);
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     // Define preferred MIME type
     const preferredMimeType = 'video/mp4';

@@ -10,7 +10,7 @@ const QuestionManager = ({ roleId, onClose }) => {
     const [editingId, setEditingId] = useState(null);
     const [editText, setEditText] = useState('');
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     const fetchQuestions = async () => {
         setLoading(true);

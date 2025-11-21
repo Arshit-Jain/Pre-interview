@@ -7,7 +7,7 @@ const RecentResponses = ({ limit = 5 }) => {
     const [responses, setResponses] = useState([]);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     useEffect(() => {
         const fetchResponses = async () => {

@@ -9,7 +9,7 @@ const InterviewResponses = ({ roleId, roleTitle, onClose }) => {
     const [selectedCandidate, setSelectedCandidate] = useState(null);
     const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     useEffect(() => {
         if (roleId) {

@@ -9,7 +9,7 @@ const RoleList = ({ interviewerId, refreshTrigger, onManageQuestions, onInvite, 
     const [error, setError] = useState('');
     const navigate = useNavigate();
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     const fetchRoles = async () => {
         if (!interviewerId) return;

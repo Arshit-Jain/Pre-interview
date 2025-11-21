@@ -28,7 +28,7 @@ const AllResponses = () => {
     // Individual video blobs map
     const [videoBlobUrls, setVideoBlobUrls] = useState({});
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     // Initial data load
     useEffect(() => {

@@ -16,7 +16,7 @@ const ManageRoles = () => {
     const [selectedRoleForInvite, setSelectedRoleForInvite] = useState(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     useEffect(() => {
         const token = localStorage.getItem('token');

@@ -10,7 +10,7 @@ const InviteCandidate = ({ roleId, roleTitle, onClose }) => {
     const [success, setSuccess] = useState('');
     const [generatedLink, setGeneratedLink] = useState(null);
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     const handleSubmit = async (e) => {
         e.preventDefault();

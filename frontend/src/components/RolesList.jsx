@@ -12,7 +12,7 @@ const RoleList = ({ interviewerId, refreshTrigger, onRoleSelect }) => {
     const [selectedForInvite, setSelectedForInvite] = useState(null);
     const [selectedForResponses, setSelectedForResponses] = useState(null);
 
-    const backendUrl = import.meta.env.BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = import.meta.env.BACKEND_URL;
 
     const fetchRoles = async () => {
         setLoading(true);
